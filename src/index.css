@@ -1,32 +1,50 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: "Bricolage Grotesque", sans-serif;
-  --font-sans: "Schibsted Grotesk", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Karla", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* warm paper & wood palette */
+  --color-paper: #efe6d3;   /* page background */
+  --color-cream: #faf5e9;   /* cards, inputs */
+  --color-card: #f6efdf;    /* secondary surfaces */
+  --color-ink: #352a1e;     /* primary text */
+  --color-fade: #82715a;    /* muted text */
+  --color-faint: #a8957a;   /* faintest text */
+  --color-line: #ddcfb2;    /* borders */
+  --color-wood: #6e4b2a;    /* primary accent */
+  --color-wood-dark: #59391c;
+  --color-sage: #58743d;    /* success */
+  --color-pine: #3e6e64;    /* playing */
+  --color-dusk: #56708a;    /* wishlist */
+  --color-honey: #9c6b1f;   /* warning / subscription */
+  --color-clay: #a8442f;    /* danger */
 }
 
 html {
-  background-color: #07070c;
+  background-color: #efe6d3;
 }
 
 body {
   font-family: var(--font-sans);
+  color: #352a1e;
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(79, 70, 229, 0.12), transparent 60%),
-    radial-gradient(900px 500px at -10% 30%, rgba(217, 119, 6, 0.06), transparent 55%),
-    #07070c;
+    radial-gradient(1100px 500px at 75% -10%, rgba(255, 251, 240, 0.9), transparent 60%),
+    radial-gradient(900px 600px at -5% 25%, rgba(168, 124, 70, 0.1), transparent 55%),
+    #efe6d3;
   min-height: 100vh;
 }
 
-/* subtle grain overlay */
+/* paper grain overlay */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.035;
+  opacity: 0.05;
+  mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -36,7 +54,25 @@ body::before {
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.4);
+  background: rgba(110, 75, 42, 0.25);
+}
+
+/* walnut wood panel */
+.wood-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 244, 222, 0.1), rgba(0, 0, 0, 0.14)),
+    repeating-linear-gradient(
+      96deg,
+      rgba(0, 0, 0, 0.07) 0 2px,
+      transparent 2px 9px,
+      rgba(255, 230, 190, 0.05) 9px 11px,
+      transparent 11px 18px
+    ),
+    linear-gradient(100deg, #6b4a2c 0%, #573820 38%, #654427 62%, #4c2f17 100%);
+  border: 1px solid #3f2814;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 235, 205, 0.18),
+    0 10px 24px -12px rgba(63, 40, 20, 0.55);
 }
 
 @keyframes rise {

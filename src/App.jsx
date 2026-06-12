@@ -16,7 +16,7 @@ const PLATFORM_COLORS = {
   Steam: "#1B2838",
   Epic: "#3D3D3D",
   GOG: "#5C2D8F",
-  Prime: "#FF9900",
+  Prime: "#cc7a00",
 };
 
 const SOURCES = {
@@ -30,12 +30,12 @@ const SOURCES = {
 };
 
 const STATUSES = {
-  wishlist: { label: "Wishlist", cls: "bg-sky-500/15 text-sky-300 border-sky-400/30" },
-  backlog: { label: "Backlog", cls: "bg-gray-500/15 text-gray-300 border-gray-400/30" },
-  playing: { label: "Playing", cls: "bg-indigo-500/15 text-indigo-300 border-indigo-400/30" },
-  completed: { label: "Completed", cls: "bg-green-500/15 text-green-300 border-green-400/30" },
-  dropped: { label: "Dropped", cls: "bg-red-500/15 text-red-300 border-red-400/30" },
-  on_hold: { label: "On Hold", cls: "bg-amber-500/15 text-amber-300 border-amber-400/30" },
+  wishlist: { label: "Wishlist", cls: "bg-dusk/10 text-dusk border-dusk/30" },
+  backlog: { label: "Backlog", cls: "bg-fade/10 text-fade border-fade/30" },
+  playing: { label: "Playing", cls: "bg-pine/10 text-pine border-pine/30" },
+  completed: { label: "Completed", cls: "bg-sage/10 text-sage border-sage/30" },
+  dropped: { label: "Dropped", cls: "bg-clay/10 text-clay border-clay/30" },
+  on_hold: { label: "On Hold", cls: "bg-honey/10 text-honey border-honey/30" },
 };
 
 const SUB_SOURCES = ["ps_plus_monthly", "ps_plus_catalog", "prime_gaming_catalog"];
@@ -135,7 +135,7 @@ function sanitizeGame(raw) {
 function PlatformBadge({ platform }) {
   return (
     <span
-      className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full text-white border border-white/15 whitespace-nowrap"
+      className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full text-cream border border-black/10 whitespace-nowrap"
       style={{ backgroundColor: PLATFORM_COLORS[platform] }}
     >
       {platform}
@@ -150,9 +150,7 @@ function SourceBadge({ source, leavingSoon }) {
     <span className="inline-flex items-center gap-1 whitespace-nowrap">
       <span
         className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${
-          sub
-            ? "bg-amber-500/15 text-amber-300 border-amber-400/40"
-            : "bg-emerald-500/10 text-emerald-300 border-emerald-400/30"
+          sub ? "bg-honey/10 text-honey border-honey/40" : "bg-sage/10 text-sage border-sage/30"
         }`}
       >
         {meta?.label ?? source}
@@ -160,7 +158,7 @@ function SourceBadge({ source, leavingSoon }) {
       {leavingSoon && (
         <span
           title="Leaving soon"
-          className="inline-flex items-center justify-center text-xs font-bold w-5 h-5 rounded-full bg-red-500/20 text-red-400 border border-red-400/50"
+          className="inline-flex items-center justify-center text-xs font-bold w-5 h-5 rounded-full bg-clay/15 text-clay border border-clay/50"
         >
           !
         </span>
@@ -184,7 +182,7 @@ function IconButton({ onClick, title, children, danger }) {
       onClick={onClick}
       title={title}
       className={`p-1.5 rounded-lg transition-colors text-sm leading-none ${
-        danger ? "text-red-400 hover:bg-red-500/15" : "text-gray-400 hover:bg-gray-700/60 hover:text-gray-100"
+        danger ? "text-clay hover:bg-clay/10" : "text-fade hover:bg-line/60 hover:text-ink"
       }`}
     >
       {children}
@@ -192,11 +190,11 @@ function IconButton({ onClick, title, children, danger }) {
   );
 }
 
-function QuickActionButton({ onClick, children, tone = "indigo" }) {
+function QuickActionButton({ onClick, children, tone = "wood" }) {
   const tones = {
-    indigo: "bg-indigo-600/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-600/35",
-    amber: "bg-amber-600/20 text-amber-300 border-amber-500/40 hover:bg-amber-600/35",
-    red: "bg-red-600/20 text-red-300 border-red-500/40 hover:bg-red-600/35",
+    wood: "bg-wood/10 text-wood border-wood/40 hover:bg-wood/20",
+    amber: "bg-honey/10 text-honey border-honey/40 hover:bg-honey/20",
+    red: "bg-clay/10 text-clay border-clay/40 hover:bg-clay/20",
   };
   return (
     <button
@@ -211,13 +209,13 @@ function QuickActionButton({ onClick, children, tone = "indigo" }) {
 function Modal({ onClose, children, wide }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-ink/40 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className={`anim-pop w-full ${wide ? "max-w-2xl" : "max-w-lg"} bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 my-6`}
+        className={`anim-pop w-full ${wide ? "max-w-2xl" : "max-w-lg"} bg-cream border border-line rounded-2xl shadow-2xl shadow-wood-dark/30 my-6`}
         role="dialog"
         aria-modal="true"
       >
@@ -285,13 +283,13 @@ function AddEditModal({ game, games, onSave, onClose }) {
     onSave(next);
   };
 
-  const field = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50";
-  const label = "block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5";
+  const field = "w-full bg-cream border border-line rounded-lg px-3 py-2 text-ink text-sm focus:outline-none focus:border-wood focus:ring-1 focus:ring-wood/40";
+  const label = "block text-xs font-bold text-fade uppercase tracking-wider mb-1.5";
 
   return (
     <Modal onClose={onClose}>
       <form onSubmit={submit} className="p-5 sm:p-6">
-        <h2 className="font-display text-xl font-bold text-gray-100 mb-5">
+        <h2 className="font-display text-2xl font-semibold text-ink mb-5">
           {editing ? "Edit Game" : "Add Game"}
         </h2>
 
@@ -300,7 +298,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
             <label className={label}>Title *</label>
             <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} className={field} placeholder="e.g. Elden Ring" />
             {duplicates.length > 0 && (
-              <div className="mt-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-400/30 rounded-lg px-3 py-2 space-y-0.5">
+              <div className="mt-2 text-xs text-honey bg-honey/10 border border-honey/30 rounded-lg px-3 py-2 space-y-0.5">
                 {duplicates.slice(0, 3).map((d) => (
                   <div key={d.id}>
                     Possible duplicate: <strong>{d.title}</strong> on {d.platform} ({SOURCES[d.source].label})
@@ -350,9 +348,9 @@ function AddEditModal({ game, games, onSave, onClose }) {
           </div>
 
           {subDep && (
-            <label className="flex items-center gap-2.5 cursor-pointer select-none bg-amber-500/5 border border-amber-400/20 rounded-lg px-3 py-2.5">
-              <input type="checkbox" checked={leavingSoon} onChange={(e) => setLeavingSoon(e.target.checked)} className="accent-amber-500 w-4 h-4" />
-              <span className="text-sm text-amber-200">Leaving soon (removal announced)</span>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none bg-honey/5 border border-honey/25 rounded-lg px-3 py-2.5">
+              <input type="checkbox" checked={leavingSoon} onChange={(e) => setLeavingSoon(e.target.checked)} className="accent-[#9c6b1f] w-4 h-4" />
+              <span className="text-sm text-honey">Leaving soon (removal announced)</span>
             </label>
           )}
 
@@ -362,13 +360,13 @@ function AddEditModal({ game, games, onSave, onClose }) {
           </div>
         </div>
 
-        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-sm text-clay">{error}</p>}
 
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
             Cancel
           </button>
-          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors">
+          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark text-cream transition-colors">
             {editing ? "Save Changes" : "Add Game"}
           </button>
         </div>
@@ -428,41 +426,41 @@ function ExportImportModal({ games, onClose, onImportParsed, onSteamImport, toas
     }
   };
 
-  const btn = "w-full text-left px-4 py-3 rounded-xl border border-gray-700 bg-gray-950/60 hover:border-indigo-500/60 hover:bg-gray-800/60 transition-colors";
+  const btn = "w-full text-left px-4 py-3 rounded-xl border border-line bg-card hover:border-wood/60 hover:bg-cream transition-colors";
 
   return (
     <Modal onClose={onClose} wide>
       <div className="p-5 sm:p-6">
-        <h2 className="font-display text-xl font-bold text-gray-100 mb-1">Export / Import</h2>
-        <p className="text-sm text-gray-400 mb-5">
+        <h2 className="font-display text-2xl font-semibold text-ink mb-1">Export / Import</h2>
+        <p className="text-sm text-fade mb-5">
           Your library lives in this browser. Export a JSON backup regularly.
         </p>
 
         <div className="grid sm:grid-cols-2 gap-3">
           <button onClick={exportJSON} className={btn}>
-            <div className="font-semibold text-gray-100 text-sm">Export JSON</div>
-            <div className="text-xs text-gray-400 mt-0.5">Full backup — re-importable</div>
+            <div className="font-semibold text-ink text-sm">Export JSON</div>
+            <div className="text-xs text-fade mt-0.5">Full backup — re-importable</div>
           </button>
           <button onClick={exportCSV} className={btn}>
-            <div className="font-semibold text-gray-100 text-sm">Export CSV</div>
-            <div className="text-xs text-gray-400 mt-0.5">For spreadsheets</div>
+            <div className="font-semibold text-ink text-sm">Export CSV</div>
+            <div className="text-xs text-fade mt-0.5">For spreadsheets</div>
           </button>
           <button onClick={() => fileRef.current?.click()} className={btn}>
-            <div className="font-semibold text-gray-100 text-sm">Import JSON</div>
-            <div className="text-xs text-gray-400 mt-0.5">Restore a previous export</div>
+            <div className="font-semibold text-ink text-sm">Import JSON</div>
+            <div className="text-xs text-fade mt-0.5">Restore a previous export</div>
           </button>
           <button onClick={() => setSteamOpen((v) => !v)} className={btn}>
-            <div className="font-semibold text-gray-100 text-sm">Import from Steam</div>
-            <div className="text-xs text-gray-400 mt-0.5">Paste GetOwnedGames JSON</div>
+            <div className="font-semibold text-ink text-sm">Import from Steam</div>
+            <div className="text-xs text-fade mt-0.5">Paste GetOwnedGames JSON</div>
           </button>
         </div>
         <input ref={fileRef} type="file" accept=".json,application/json" onChange={handleFile} className="hidden" />
 
         {steamOpen && (
           <div className="mt-4 anim-rise">
-            <p className="text-xs text-gray-400 mb-2 leading-relaxed">
-              1. Get a free API key at <span className="font-mono text-gray-300">steamcommunity.com/dev/apikey</span> · 2. Set your Steam profile to public · 3. Open{" "}
-              <span className="font-mono text-gray-300 break-all">
+            <p className="text-xs text-fade mb-2 leading-relaxed">
+              1. Get a free API key at <span className="font-mono text-ink">steamcommunity.com/dev/apikey</span> · 2. Set your Steam profile to public · 3. Open{" "}
+              <span className="font-mono text-ink break-all">
                 https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=KEY&steamid=ID&include_appinfo=1&format=json
               </span>{" "}
               in your browser · 4. Copy the whole JSON response and paste it below.
@@ -472,29 +470,29 @@ function ExportImportModal({ games, onClose, onImportParsed, onSteamImport, toas
               onChange={(e) => setSteamText(e.target.value)}
               rows={5}
               placeholder='{"response":{"game_count":123,"games":[...]}}'
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-xs font-mono focus:outline-none focus:border-indigo-500"
+              className="w-full bg-cream border border-line rounded-lg px-3 py-2 text-ink text-xs font-mono focus:outline-none focus:border-wood"
             />
             <button
               onClick={runSteamImport}
               disabled={!steamText.trim()}
-              className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
+              className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark disabled:opacity-40 disabled:cursor-not-allowed text-cream transition-colors"
             >
               Parse &amp; Import
             </button>
             {steamResult && (
-              <p className="mt-2 text-sm text-green-400">
+              <p className="mt-2 text-sm text-sage">
                 {steamResult.added} games added, {steamResult.skipped} skipped (already in library).
               </p>
             )}
           </div>
         )}
 
-        <p className="mt-5 text-xs text-gray-500 leading-relaxed">
+        <p className="mt-5 text-xs text-faint leading-relaxed">
           PlayStation, Epic, GOG, Prime and Nintendo have no public library APIs — add those games manually.
         </p>
 
         <div className="mt-4 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
             Close
           </button>
         </div>
@@ -510,11 +508,11 @@ function ExportImportModal({ games, onClose, onImportParsed, onSteamImport, toas
 function Bar({ label, count, max, color }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-20 shrink-0 text-gray-400 truncate">{label}</span>
-      <div className="flex-1 h-2.5 bg-gray-800 rounded-full overflow-hidden">
+      <span className="w-20 shrink-0 text-fade truncate">{label}</span>
+      <div className="flex-1 h-2.5 bg-line/50 rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all" style={{ width: max ? `${(count / max) * 100}%` : 0, backgroundColor: color }} />
       </div>
-      <span className="w-7 shrink-0 text-right font-mono text-gray-300">{count}</span>
+      <span className="w-7 shrink-0 text-right font-mono text-ink">{count}</span>
     </div>
   );
 }
@@ -538,42 +536,42 @@ function StatsPanel({ games }) {
     return { byStatus, byPlatform, subDep, leaving, total: games.length, rate: nonWishlist ? Math.round((completed / nonWishlist) * 100) : 0 };
   }, [games]);
 
-  const statusColors = { wishlist: "#38bdf8", backlog: "#9ca3af", playing: "#818cf8", completed: "#4ade80", dropped: "#f87171", on_hold: "#fbbf24" };
+  const statusColors = { wishlist: "#56708a", backlog: "#a8957a", playing: "#3e6e64", completed: "#58743d", dropped: "#a8442f", on_hold: "#9c6b1f" };
   const maxStatus = Math.max(0, ...Object.values(stats.byStatus));
   const maxPlatform = Math.max(0, ...Object.values(stats.byPlatform));
 
   return (
-    <section className="bg-gray-900/70 border border-gray-800 rounded-2xl overflow-hidden">
+    <section className="bg-cream/80 border border-line rounded-2xl overflow-hidden shadow-sm shadow-wood-dark/5">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-800/40 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-card transition-colors"
       >
-        <span className="font-display font-bold text-sm text-gray-200 uppercase tracking-wider">Stats</span>
-        <span className="flex items-center gap-3 text-xs text-gray-400">
-          <span className="font-mono text-gray-200">{stats.total} games</span>
-          {stats.subDep > 0 && <span className="text-amber-400">{stats.subDep} at sub risk</span>}
-          {stats.leaving > 0 && <span className="text-red-400">{stats.leaving} leaving soon</span>}
-          <span className="text-gray-500">{open ? "▲" : "▼"}</span>
+        <span className="font-display font-semibold text-base text-ink">Stats</span>
+        <span className="flex items-center gap-3 text-xs text-fade">
+          <span className="font-mono text-ink">{stats.total} games</span>
+          {stats.subDep > 0 && <span className="text-honey">{stats.subDep} at sub risk</span>}
+          {stats.leaving > 0 && <span className="text-clay">{stats.leaving} leaving soon</span>}
+          <span className="text-faint">{open ? "▲" : "▼"}</span>
         </span>
       </button>
       {open && (
         <div className="px-4 pb-4 grid sm:grid-cols-2 gap-x-8 gap-y-4 anim-rise">
           <div className="space-y-1.5">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">By Status</h3>
+            <h3 className="text-xs font-bold text-faint uppercase tracking-wider mb-2">By Status</h3>
             {Object.entries(STATUSES).map(([k, v]) => (
               <Bar key={k} label={v.label} count={stats.byStatus[k] || 0} max={maxStatus} color={statusColors[k]} />
             ))}
           </div>
           <div className="space-y-1.5">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">By Platform</h3>
+            <h3 className="text-xs font-bold text-faint uppercase tracking-wider mb-2">By Platform</h3>
             {PLATFORMS.filter((p) => stats.byPlatform[p]).map((p) => (
               <Bar key={p} label={p} count={stats.byPlatform[p]} max={maxPlatform} color={PLATFORM_COLORS[p]} />
             ))}
           </div>
-          <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-1 text-sm border-t border-gray-800 pt-3">
-            <span className="text-amber-300">{stats.subDep} games lost if subscriptions lapse</span>
-            <span className="text-red-300">{stats.leaving} flagged as leaving soon</span>
-            <span className="text-green-300">{stats.rate}% completion rate</span>
+          <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-1 text-sm border-t border-line pt-3">
+            <span className="text-honey">{stats.subDep} games lost if subscriptions lapse</span>
+            <span className="text-clay">{stats.leaving} flagged as leaving soon</span>
+            <span className="text-sage">{stats.rate}% completion rate</span>
           </div>
         </div>
       )}
@@ -588,7 +586,7 @@ function StatsPanel({ games }) {
 function ChipGroup({ label, options, selected, onToggle, render }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">{label}</span>
+      <span className="text-xs font-bold text-faint uppercase tracking-wider mr-1">{label}</span>
       {options.map((opt) => {
         const active = selected.includes(opt);
         return (
@@ -597,8 +595,8 @@ function ChipGroup({ label, options, selected, onToggle, render }) {
             onClick={() => onToggle(opt)}
             className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
               active
-                ? "bg-indigo-600 border-indigo-500 text-white"
-                : "bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200"
+                ? "bg-wood border-wood-dark text-cream"
+                : "bg-cream border-line text-fade hover:border-wood/50 hover:text-ink"
             }`}
           >
             {render ? render(opt) : opt}
@@ -621,11 +619,11 @@ function FilterBar({ filters, setFilters }) {
 
   const toggleBtn = (active) =>
     `text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-      active ? "bg-amber-600/80 border-amber-500 text-white" : "bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200"
+      active ? "bg-honey border-honey text-cream" : "bg-cream border-line text-fade hover:border-wood/50 hover:text-ink"
     }`;
 
   return (
-    <div className="bg-gray-900/70 border border-gray-800 rounded-2xl px-4 py-3 space-y-2.5">
+    <div className="bg-cream/80 border border-line rounded-2xl px-4 py-3 space-y-2.5 shadow-sm shadow-wood-dark/5">
       <ChipGroup label="Platform" options={PLATFORMS} selected={filters.platforms} onToggle={toggle("platforms")} />
       <ChipGroup
         label="Source"
@@ -641,7 +639,7 @@ function FilterBar({ filters, setFilters }) {
         onToggle={toggle("statuses")}
         render={(s) => STATUSES[s].label}
       />
-      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-gray-800">
+      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-line">
         <button onClick={() => setFilters((f) => ({ ...f, subRisk: !f.subRisk }))} className={toggleBtn(filters.subRisk)}>
           ⚠ Subscription Risk
         </button>
@@ -650,12 +648,12 @@ function FilterBar({ filters, setFilters }) {
         </button>
         {activeCount > 0 && (
           <span className="ml-auto flex items-center gap-2">
-            <span className="text-xs font-mono text-indigo-300 bg-indigo-500/15 border border-indigo-400/30 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-mono text-wood bg-wood/10 border border-wood/30 px-2 py-0.5 rounded-full">
               {activeCount} active
             </span>
             <button
               onClick={() => setFilters({ platforms: [], sources: [], statuses: [], subRisk: false, leavingSoon: false })}
-              className="text-xs font-semibold text-gray-400 hover:text-gray-100 underline underline-offset-2"
+              className="text-xs font-semibold text-fade hover:text-ink underline underline-offset-2"
             >
               Clear All
             </button>
@@ -687,7 +685,7 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
       <th key={col.key} className="px-3 py-2.5 text-left">
         <button
           onClick={() => setSort((s) => (s.key === col.key ? { key: col.key, dir: s.dir === "asc" ? "desc" : "asc" } : { key: col.key, dir: "asc" }))}
-          className={`text-xs font-bold uppercase tracking-wider transition-colors ${active ? "text-indigo-300" : "text-gray-500 hover:text-gray-300"}`}
+          className={`text-xs font-bold uppercase tracking-wider transition-colors ${active ? "text-wood" : "text-faint hover:text-fade"}`}
         >
           {col.label} {active ? (sort.dir === "asc" ? "↑" : "↓") : ""}
         </button>
@@ -698,9 +696,9 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
   return (
     <>
       {/* Desktop table */}
-      <div className="hidden sm:block bg-gray-900/70 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="hidden sm:block bg-cream/80 border border-line rounded-2xl overflow-hidden shadow-sm shadow-wood-dark/5">
         <table className="w-full text-sm">
-          <thead className="border-b border-gray-800">
+          <thead className="border-b border-line bg-card/70">
             <tr>
               {COLUMNS.map(header)}
               <th className="px-3 py-2.5" />
@@ -712,22 +710,22 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
               return (
                 <tr
                   key={g.id}
-                  className={`border-b border-gray-800/60 last:border-0 hover:bg-gray-800/50 transition-colors ${
+                  className={`border-b border-line/60 last:border-0 hover:bg-card transition-colors ${
                     g.status === "completed" ? "opacity-60" : ""
-                  } ${sub ? "border-l-4 border-l-amber-400" : "border-l-4 border-l-transparent"}`}
+                  } ${sub ? "border-l-4 border-l-honey" : "border-l-4 border-l-transparent"}`}
                 >
                   <td className="px-3 py-2.5 max-w-[280px]">
-                    <button onClick={() => onEdit(g)} className="text-gray-100 font-medium hover:text-indigo-300 transition-colors text-left truncate block max-w-full" title={g.title}>
+                    <button onClick={() => onEdit(g)} className="text-ink font-medium hover:text-wood transition-colors text-left truncate block max-w-full" title={g.title}>
                       {g.title}
                     </button>
-                    {g.notes && <div className="text-xs text-gray-500 truncate" title={g.notes}>{g.notes}</div>}
+                    {g.notes && <div className="text-xs text-faint truncate" title={g.notes}>{g.notes}</div>}
                   </td>
                   <td className="px-3 py-2.5"><PlatformBadge platform={g.platform} /></td>
                   <td className="px-3 py-2.5"><SourceBadge source={g.source} leavingSoon={g.leavingSoon} /></td>
                   <td className="px-3 py-2.5"><StatusBadge status={g.status} /></td>
-                  <td className="px-3 py-2.5 font-mono text-gray-300">{g.rating ?? <span className="text-gray-600">—</span>}</td>
-                  <td className="px-3 py-2.5 font-mono text-gray-300">{g.hoursPlayed ?? <span className="text-gray-600">—</span>}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-gray-400">{g.dateAdded}</td>
+                  <td className="px-3 py-2.5 font-mono text-ink">{g.rating ?? <span className="text-faint">—</span>}</td>
+                  <td className="px-3 py-2.5 font-mono text-ink">{g.hoursPlayed ?? <span className="text-faint">—</span>}</td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-fade">{g.dateAdded}</td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap">
                     <IconButton onClick={() => onEdit(g)} title="Edit">✎</IconButton>
                     <IconButton onClick={() => onDelete(g)} title="Delete" danger>✕</IconButton>
@@ -746,12 +744,12 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
           return (
             <div
               key={g.id}
-              className={`bg-gray-900/70 border border-gray-800 rounded-xl p-3.5 ${sub ? "border-l-4 border-l-amber-400" : ""} ${
+              className={`bg-cream/80 border border-line rounded-xl p-3.5 ${sub ? "border-l-4 border-l-honey" : ""} ${
                 g.status === "completed" ? "opacity-60" : ""
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <button onClick={() => onEdit(g)} className="text-gray-100 font-medium text-left leading-snug">
+                <button onClick={() => onEdit(g)} className="text-ink font-medium text-left leading-snug">
                   {g.title}
                 </button>
                 <div className="flex shrink-0">
@@ -775,11 +773,11 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
 function QuickRow({ g, children }) {
   return (
     <div
-      className={`flex flex-wrap items-center gap-2 bg-gray-900/70 border border-gray-800 rounded-xl px-3.5 py-2.5 ${
-        isSubDependent(g) ? "border-l-4 border-l-amber-400" : ""
+      className={`flex flex-wrap items-center gap-2 bg-cream/80 border border-line rounded-xl px-3.5 py-2.5 shadow-sm shadow-wood-dark/5 ${
+        isSubDependent(g) ? "border-l-4 border-l-honey" : ""
       }`}
     >
-      <span className="text-sm font-medium text-gray-100 mr-1">{g.title}</span>
+      <span className="text-sm font-medium text-ink mr-1">{g.title}</span>
       <PlatformBadge platform={g.platform} />
       <SourceBadge source={g.source} leavingSoon={g.leavingSoon} />
       <StatusBadge status={g.status} />
@@ -1025,12 +1023,12 @@ export default function App() {
     filters.platforms.length + filters.sources.length + filters.statuses.length + (filters.subRisk ? 1 : 0) + (filters.leavingSoon ? 1 : 0);
 
   if (games === null) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500 font-mono text-sm">Loading…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-fade font-mono text-sm">Loading…</div>;
   }
 
   const renderQuickActions = (g) => (
     <>
-      <QuickActionButton tone="indigo" onClick={() => patchGame(g.id, { source: "purchased", leavingSoon: undefined }, `"${g.title}" marked as purchased.`)}>
+      <QuickActionButton tone="wood" onClick={() => patchGame(g.id, { source: "purchased", leavingSoon: undefined }, `"${g.title}" marked as purchased.`)}>
         Mark Purchased
       </QuickActionButton>
       <QuickActionButton tone="amber" onClick={() => patchGame(g.id, { leavingSoon: !g.leavingSoon })}>
@@ -1043,28 +1041,28 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen text-gray-100 pb-20">
+    <div className="min-h-screen text-ink pb-20">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 pt-6 sm:pt-10">
-        {/* Header */}
-        <header className="flex flex-wrap items-end justify-between gap-3 mb-5 anim-rise">
+        {/* Wood header */}
+        <header className="wood-panel rounded-2xl px-5 sm:px-7 py-5 sm:py-6 flex flex-wrap items-end justify-between gap-4 mb-6 anim-rise">
           <div>
-            <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight">
-              GAME<span className="text-indigo-400">VAULT</span>
+            <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-[#f5ead3]">
+              Game <span className="italic text-[#e8c896]">Vault</span>
             </h1>
-            <p className="text-xs text-gray-500 mt-1 font-mono">
+            <p className="text-xs mt-1.5 font-mono text-[#d8c2a0]/80">
               {games.length} games · NS1 / NS2 / PS / Steam / Epic / GOG / Prime
             </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setModal({ type: "io" })}
-              className="px-3.5 py-2 rounded-xl text-sm font-semibold border border-gray-700 text-gray-300 hover:bg-gray-800 transition-colors"
+              className="px-3.5 py-2 rounded-xl text-sm font-semibold border border-[#caa978]/40 text-[#f0e2c8] hover:bg-[#f0e2c8]/10 transition-colors"
             >
               Export / Import
             </button>
             <button
               onClick={() => setModal({ type: "add" })}
-              className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg shadow-indigo-900/40"
+              className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-[#f0e2c8] hover:bg-[#fbf2dd] text-wood-dark transition-colors shadow-lg shadow-black/20"
             >
               + Add Game <span className="hidden sm:inline opacity-50 font-mono text-xs ml-1">N</span>
             </button>
@@ -1074,18 +1072,18 @@ export default function App() {
         {/* Quick Check search */}
         <div className="mb-4 anim-rise" style={{ animationDelay: "60ms" }}>
           <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-lg pointer-events-none">⌕</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-faint text-lg pointer-events-none">⌕</span>
             <input
               ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Quick Check — do I already own this game?  ( / )"
-              className="w-full bg-gray-900 border-2 border-gray-700 focus:border-indigo-500 rounded-2xl pl-11 pr-10 py-3.5 text-base text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-colors"
+              className="w-full bg-cream border-2 border-line focus:border-wood rounded-2xl pl-11 pr-10 py-3.5 text-base text-ink placeholder-faint focus:outline-none focus:ring-2 focus:ring-wood/20 transition-colors shadow-sm shadow-wood-dark/5"
             />
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-200 p-1"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-ink p-1"
                 title="Clear"
               >
                 ✕
@@ -1096,18 +1094,18 @@ export default function App() {
           {quickMatches !== null && (
             <div className="mt-2.5 anim-rise">
               {quickMatches.length === 0 ? (
-                <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-3 text-green-300 font-semibold text-sm">
+                <div className="rounded-xl border border-sage/40 bg-sage/10 px-4 py-3 text-sage font-semibold text-sm">
                   ✓ Not in your library — safe to buy.
                 </div>
               ) : (
-                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-                  <p className="text-amber-200 font-semibold text-sm mb-2">
+                <div className="rounded-xl border border-honey/40 bg-honey/10 px-4 py-3">
+                  <p className="text-honey font-semibold text-sm mb-2">
                     Found {quickMatches.length} match{quickMatches.length > 1 ? "es" : ""} in your library:
                   </p>
                   <div className="space-y-1.5">
                     {quickMatches.map((g) => (
                       <div key={g.id} className="flex flex-wrap items-center gap-1.5 text-sm">
-                        <button onClick={() => setModal({ type: "edit", game: g })} className="text-gray-100 font-medium hover:text-indigo-300 mr-1">
+                        <button onClick={() => setModal({ type: "edit", game: g })} className="text-ink font-medium hover:text-wood mr-1">
                           {g.title}
                         </button>
                         <PlatformBadge platform={g.platform} />
@@ -1129,7 +1127,7 @@ export default function App() {
               key={t.id}
               onClick={() => setTab(t.id)}
               className={`px-3.5 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
-                tab === t.id ? "bg-gray-100 text-gray-950" : "bg-gray-900 text-gray-400 border border-gray-800 hover:text-gray-200"
+                tab === t.id ? "bg-wood text-cream shadow-sm" : "bg-cream text-fade border border-line hover:text-ink hover:border-wood/40"
               }`}
             >
               {t.label}
@@ -1151,10 +1149,10 @@ export default function App() {
           {/* Content */}
           <main className="anim-rise" style={{ animationDelay: "220ms" }}>
             {games.length === 0 ? (
-              <div className="text-center py-20 bg-gray-900/50 border border-dashed border-gray-700 rounded-2xl">
-                <p className="font-display text-xl font-bold text-gray-300 mb-3">Your library is empty</p>
-                <p className="text-sm text-gray-500 mb-5">Add your first game to start tracking.</p>
-                <button onClick={() => setModal({ type: "add" })} className="px-5 py-2.5 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors">
+              <div className="text-center py-20 bg-cream/60 border border-dashed border-line rounded-2xl">
+                <p className="font-display text-2xl font-semibold text-ink mb-3">Your library is empty</p>
+                <p className="text-sm text-fade mb-5">Add your first game to start tracking.</p>
+                <button onClick={() => setModal({ type: "add" })} className="px-5 py-2.5 rounded-xl font-semibold bg-wood hover:bg-wood-dark text-cream transition-colors">
                   + Add your first game
                 </button>
               </div>
@@ -1164,12 +1162,12 @@ export default function App() {
                   const group = visibleGames.filter((g) => g.source === src);
                   return (
                     <section key={src}>
-                      <h2 className="font-display text-sm font-bold uppercase tracking-wider text-gray-400 mb-2">
+                      <h2 className="font-display text-lg font-semibold text-ink mb-2">
                         {src === "ps_plus_monthly" ? "Monthly (Claimed)" : "Catalog"}{" "}
-                        <span className="font-mono text-gray-600">({group.length})</span>
+                        <span className="font-mono text-sm text-faint">({group.length})</span>
                       </h2>
                       {group.length === 0 ? (
-                        <p className="text-sm text-gray-600 italic">None tracked.</p>
+                        <p className="text-sm text-faint italic">None tracked.</p>
                       ) : (
                         <div className="space-y-2">{group.map((g) => <QuickRow key={g.id} g={g}>{renderQuickActions(g)}</QuickRow>)}</div>
                       )}
@@ -1180,7 +1178,7 @@ export default function App() {
                   href="https://store.playstation.com/zh-tw-HK/pages/ps-plus"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block text-sm text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+                  className="inline-block text-sm text-wood hover:text-wood-dark underline underline-offset-2"
                 >
                   Check Taiwan PS Plus Catalog →
                 </a>
@@ -1188,7 +1186,7 @@ export default function App() {
             ) : tab === "prime" ? (
               <div className="space-y-2">
                 {visibleGames.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-10">No Prime Gaming Collection games tracked.</p>
+                  <p className="text-sm text-fade text-center py-10">No Prime Gaming Collection games tracked.</p>
                 ) : (
                   visibleGames.map((g) => <QuickRow key={g.id} g={g}>{renderQuickActions(g)}</QuickRow>)
                 )}
@@ -1196,12 +1194,12 @@ export default function App() {
             ) : tab === "wishlist" ? (
               <div className="space-y-2">
                 {visibleGames.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-10">Wishlist is empty.</p>
+                  <p className="text-sm text-fade text-center py-10">Wishlist is empty.</p>
                 ) : (
                   visibleGames.map((g) => (
                     <QuickRow key={g.id} g={g}>
                       <QuickActionButton
-                        tone="indigo"
+                        tone="wood"
                         onClick={() => patchGame(g.id, { status: "backlog", source: "purchased" }, `"${g.title}" purchased → moved to backlog.`)}
                       >
                         Mark Purchased
@@ -1216,18 +1214,18 @@ export default function App() {
             ) : tab === "leaving" ? (
               <div className="space-y-2">
                 {visibleGames.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-10">Nothing flagged as leaving soon. 🎉</p>
+                  <p className="text-sm text-fade text-center py-10">Nothing flagged as leaving soon. 🎉</p>
                 ) : (
                   visibleGames.map((g) => <QuickRow key={g.id} g={g}>{renderQuickActions(g)}</QuickRow>)
                 )}
               </div>
             ) : visibleGames.length === 0 ? (
-              <div className="text-center py-16 bg-gray-900/50 border border-dashed border-gray-700 rounded-2xl">
-                <p className="text-gray-400 mb-3">No games match your filters.</p>
+              <div className="text-center py-16 bg-cream/60 border border-dashed border-line rounded-2xl">
+                <p className="text-fade mb-3">No games match your filters.</p>
                 {activeFilterCount > 0 && (
                   <button
                     onClick={() => setFilters({ platforms: [], sources: [], statuses: [], subRisk: false, leavingSoon: false })}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-700 text-gray-300 hover:bg-gray-800 transition-colors"
+                    className="px-4 py-2 rounded-lg text-sm font-semibold border border-line text-ink hover:bg-card transition-colors"
                   >
                     Clear Filters
                   </button>
@@ -1245,11 +1243,11 @@ export default function App() {
           </main>
         </div>
 
-        <footer className="mt-10 text-center text-xs text-gray-600 leading-relaxed">
-          Data is stored in this browser only (localStorage) — use <strong className="text-gray-500">Export JSON</strong> for backups or to move devices.
+        <footer className="mt-10 text-center text-xs text-faint leading-relaxed">
+          Data is stored in this browser only (localStorage) — use <strong className="text-fade">Export JSON</strong> for backups or to move devices.
           <br />
-          Shortcuts: <kbd className="font-mono text-gray-500">N</kbd> add · <kbd className="font-mono text-gray-500">/</kbd> search ·{" "}
-          <kbd className="font-mono text-gray-500">Esc</kbd> close
+          Shortcuts: <kbd className="font-mono text-fade">N</kbd> add · <kbd className="font-mono text-fade">/</kbd> search ·{" "}
+          <kbd className="font-mono text-fade">Esc</kbd> close
         </footer>
       </div>
 
@@ -1262,15 +1260,15 @@ export default function App() {
       {modal?.type === "delete" && (
         <Modal onClose={() => setModal(null)}>
           <div className="p-6">
-            <h2 className="font-display text-lg font-bold text-gray-100 mb-2">Delete game?</h2>
-            <p className="text-sm text-gray-400 mb-5">
-              "<span className="text-gray-200">{modal.game.title}</span>" ({modal.game.platform}) will be permanently removed.
+            <h2 className="font-display text-xl font-semibold text-ink mb-2">Delete game?</h2>
+            <p className="text-sm text-fade mb-5">
+              "<span className="text-ink">{modal.game.title}</span>" ({modal.game.platform}) will be permanently removed.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors">
+              <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
                 Cancel
               </button>
-              <button onClick={() => deleteGame(modal.game)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors">
+              <button onClick={() => deleteGame(modal.game)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-clay hover:bg-[#8e3826] text-cream transition-colors">
                 Delete
               </button>
             </div>
@@ -1280,18 +1278,18 @@ export default function App() {
       {modal?.type === "conflict" && (
         <Modal onClose={() => setModal(null)}>
           <div className="p-6">
-            <h2 className="font-display text-lg font-bold text-gray-100 mb-2">Import conflict</h2>
-            <p className="text-sm text-gray-400 mb-5">
+            <h2 className="font-display text-xl font-semibold text-ink mb-2">Import conflict</h2>
+            <p className="text-sm text-fade mb-5">
               {modal.conflictCount} game{modal.conflictCount > 1 ? "s" : ""} in this file already exist in your library (same ID).
             </p>
             <div className="flex flex-wrap justify-end gap-2">
-              <button onClick={() => resolveConflict("cancel")} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors">
+              <button onClick={() => resolveConflict("cancel")} className="px-4 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
                 Cancel
               </button>
-              <button onClick={() => resolveConflict("skip")} className="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-600 text-gray-200 hover:bg-gray-800 transition-colors">
+              <button onClick={() => resolveConflict("skip")} className="px-4 py-2 rounded-lg text-sm font-semibold border border-line text-ink hover:bg-card transition-colors">
                 Skip Existing
               </button>
-              <button onClick={() => resolveConflict("overwrite")} className="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors">
+              <button onClick={() => resolveConflict("overwrite")} className="px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark text-cream transition-colors">
                 Overwrite
               </button>
             </div>
@@ -1305,12 +1303,12 @@ export default function App() {
           <button
             key={t.id}
             onClick={() => setToasts((ts) => ts.filter((x) => x.id !== t.id))}
-            className={`anim-pop block w-full text-left px-4 py-3 rounded-xl text-sm font-medium shadow-xl border backdrop-blur ${
+            className={`anim-pop block w-full text-left px-4 py-3 rounded-xl text-sm font-medium shadow-xl border ${
               t.type === "error"
-                ? "bg-red-950/90 border-red-500/50 text-red-200"
+                ? "bg-[#f6e2db] border-clay/40 text-clay"
                 : t.type === "success"
-                ? "bg-green-950/90 border-green-500/40 text-green-200"
-                : "bg-gray-900/95 border-gray-700 text-gray-200"
+                ? "bg-[#e9efdc] border-sage/40 text-sage"
+                : "bg-cream border-line text-ink"
             }`}
           >
             {t.msg}
