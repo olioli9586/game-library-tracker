@@ -869,7 +869,7 @@ const COLUMNS = [
   { key: "dateAdded", label: "Added" },
 ];
 
-function GameTable({ games, sort, setSort, onEdit, onDelete }) {
+function GameTable({ games, sort, setSort, onEdit, onDelete, duplicatesMap }) {
   const header = (col) => {
     const active = sort.key === col.key;
     return (
@@ -909,6 +909,14 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
                     <button onClick={() => onEdit(g)} className="text-ink font-medium hover:text-wood transition-colors text-left truncate block max-w-full" title={g.title}>
                       {g.title}
                     </button>
+                    {duplicatesMap?.get(g.id)?.length > 0 && (
+                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                        <span className="text-[10px] text-faint uppercase tracking-wider">also on</span>
+                        {duplicatesMap.get(g.id).map((d) => (
+                          <span key={d.id} className="scale-90 origin-left"><PlatformBadge platform={d.platform} /></span>
+                        ))}
+                      </div>
+                    )}
                     {g.notes && <div className="text-xs text-faint truncate" title={g.notes}>{g.notes}</div>}
                   </td>
                   <td className="px-3 py-2.5"><PlatformBadge platform={g.platform} /></td>
@@ -952,6 +960,14 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
                 <SourceBadge source={g.source} leavingSoon={g.leavingSoon} />
                 <StatusBadge status={g.status} />
               </div>
+              {duplicatesMap?.get(g.id)?.length > 0 && (
+                <div className="flex items-center gap-1 mt-2 flex-wrap">
+                  <span className="text-[10px] text-faint uppercase tracking-wider">also on</span>
+                  {duplicatesMap.get(g.id).map((d) => (
+                    <span key={d.id} className="scale-90 origin-left"><PlatformBadge platform={d.platform} /></span>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -973,6 +989,147 @@ function QuickRow({ g, children }) {
       <StatusBadge status={g.status} />
       <span className="ml-auto flex flex-wrap gap-1.5">{children}</span>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Yearly Recap                                                         */
+/* ------------------------------------------------------------------ */
+
+function YearlyRecapModal({ games, onClose, onEditGame }) {
+  const years = useMemo(() => {
+    const set = new Set();
+    for (const g of games) {
+      if (g.dateAdded) set.add(g.dateAdded.slice(0, 4));
+      if (g.completedDate) set.add(g.completedDate.slice(0, 4));
+    }
+    set.add(new Date().getFullYear().toString());
+    return [...set].sort().reverse();
+  }, [games]);
+
+  const [year, setYear] = useState(years[0]);
+
+  const recap = useMemo(() => {
+    const added = games.filter((g) => g.dateAdded?.startsWith(year));
+    const completed = games.filter((g) => g.completedDate?.startsWith(year));
+
+    const byPlatformAdded = {};
+    for (const g of added) byPlatformAdded[g.platform] = (byPlatformAdded[g.platform] || 0) + 1;
+    const topPlatformEntry = Object.entries(byPlatformAdded).sort((a, b) => b[1] - a[1])[0];
+
+    const ratedCompleted = completed.filter((g) => typeof g.rating === "number");
+    const avgRating = ratedCompleted.length
+      ? (ratedCompleted.reduce((s, g) => s + g.rating, 0) / ratedCompleted.length).toFixed(1)
+      : null;
+
+    const topRated = [...completed]
+      .filter((g) => typeof g.rating === "number")
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 3);
+
+    const currentlyPlaying = games.filter((g) => g.status === "playing");
+
+    const oldestBacklog = [...games]
+      .filter((g) => g.status === "backlog" && g.dateAdded)
+      .sort((a, b) => a.dateAdded.localeCompare(b.dateAdded))[0];
+
+    return { added, completed, topPlatform: topPlatformEntry, avgRating, topRated, currentlyPlaying, oldestBacklog };
+  }, [games, year]);
+
+  const Stat = ({ value, label, tone = "ink" }) => {
+    const toneCls = {
+      ink: "text-ink",
+      sage: "text-sage",
+      wood: "text-wood",
+      honey: "text-honey",
+      clay: "text-clay",
+    };
+    return (
+      <div className="bg-card border border-line rounded-xl px-4 py-3">
+        <div className={`font-display text-3xl font-bold leading-none ${toneCls[tone]}`}>{value}</div>
+        <div className="text-xs text-fade mt-1.5 uppercase tracking-wider font-semibold">{label}</div>
+      </div>
+    );
+  };
+
+  const linkBtn = "text-left text-sm text-ink hover:text-wood font-medium";
+
+  return (
+    <Modal onClose={onClose} wide>
+      <div className="p-5 sm:p-7">
+        <div className="flex items-end justify-between gap-3 mb-5">
+          <div>
+            <p className="text-xs text-fade uppercase tracking-[0.2em] font-bold mb-1">Year in Review</p>
+            <h2 className="font-display text-3xl sm:text-4xl font-semibold text-ink leading-tight">
+              <span className="italic text-wood">{year}</span>
+            </h2>
+          </div>
+          <select
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className="bg-cream border border-line rounded-lg px-3 py-1.5 text-sm font-mono text-ink focus:outline-none focus:border-wood"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
+          <Stat value={recap.completed.length} label="Completed" tone="sage" />
+          <Stat value={recap.added.length} label="Added" tone="wood" />
+          <Stat value={recap.currentlyPlaying.length} label="Playing now" tone="ink" />
+          <Stat value={recap.avgRating ?? "—"} label="Avg rating" tone="honey" />
+        </div>
+
+        <div className="space-y-4">
+          {recap.topPlatform && (
+            <div className="bg-card border border-line rounded-xl px-4 py-3 flex items-center gap-3">
+              <PlatformBadge platform={recap.topPlatform[0]} />
+              <div>
+                <div className="text-sm text-ink"><strong>{recap.topPlatform[0]}</strong> was your most-added platform</div>
+                <div className="text-xs text-fade">{recap.topPlatform[1]} games added in {year}</div>
+              </div>
+            </div>
+          )}
+
+          {recap.topRated.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-faint uppercase tracking-wider mb-2">Top rated completions</h3>
+              <div className="space-y-1.5">
+                {recap.topRated.map((g) => (
+                  <div key={g.id} className="flex items-center gap-2 bg-card border border-line rounded-lg px-3 py-2">
+                    <span className="font-display text-lg font-bold text-honey w-9 tabular-nums">{g.rating}</span>
+                    <button onClick={() => { onEditGame(g); onClose(); }} className={linkBtn + " flex-1 truncate"}>{g.title}</button>
+                    <PlatformBadge platform={g.platform} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recap.oldestBacklog && (
+            <div className="bg-clay/5 border border-clay/30 rounded-xl px-4 py-3">
+              <div className="text-xs font-bold text-clay uppercase tracking-wider mb-1">Longest in backlog</div>
+              <button onClick={() => { onEditGame(recap.oldestBacklog); onClose(); }} className={linkBtn}>
+                {recap.oldestBacklog.title}
+              </button>
+              <div className="text-xs text-fade font-mono mt-0.5">Added {recap.oldestBacklog.dateAdded} · still untouched</div>
+            </div>
+          )}
+
+          {recap.added.length === 0 && recap.completed.length === 0 && (
+            <p className="text-sm text-faint italic text-center py-6">No activity tracked for {year}.</p>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -1250,6 +1407,20 @@ export default function App() {
     });
   }, [games, tab, query, filters, sort]);
 
+  const duplicatesMap = useMemo(() => {
+    const m = new Map();
+    if (!games) return m;
+    for (let i = 0; i < games.length; i++) {
+      const dups = [];
+      for (let j = 0; j < games.length; j++) {
+        if (i === j) continue;
+        if (fuzzyMatch(games[i].title, games[j].title)) dups.push(games[j]);
+      }
+      if (dups.length) m.set(games[i].id, dups);
+    }
+    return m;
+  }, [games]);
+
   const activeFilterCount =
     filters.platforms.length + filters.sources.length + filters.statuses.length + (filters.subRisk ? 1 : 0) + (filters.leavingSoon ? 1 : 0);
 
@@ -1284,7 +1455,13 @@ export default function App() {
               {games.length} games · NS1 / NS2 / PS / Steam / Epic / GOG / Prime
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setModal({ type: "recap" })}
+              className="px-3.5 py-2 rounded-xl text-sm font-semibold border border-[#caa978]/40 text-[#f0e2c8] hover:bg-[#f0e2c8]/10 transition-colors"
+            >
+              Recap
+            </button>
             <button
               onClick={() => setModal({ type: "io" })}
               className="px-3.5 py-2 rounded-xl text-sm font-semibold border border-[#caa978]/40 text-[#f0e2c8] hover:bg-[#f0e2c8]/10 transition-colors"
@@ -1477,6 +1654,7 @@ export default function App() {
                 setSort={setSort}
                 onEdit={(g) => setModal({ type: "edit", game: g })}
                 onDelete={(g) => setModal({ type: "delete", game: g })}
+                duplicatesMap={duplicatesMap}
               />
             )}
           </main>
@@ -1501,6 +1679,9 @@ export default function App() {
       )}
       {modal?.type === "sub-edit" && (
         <SubscriptionModal sub={modal.sub} onSave={saveSub} onDelete={deleteSub} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === "recap" && (
+        <YearlyRecapModal games={games} onClose={() => setModal(null)} onEditGame={(g) => setModal({ type: "edit", game: g })} />
       )}
       {modal?.type === "delete" && (
         <Modal onClose={() => setModal(null)}>
