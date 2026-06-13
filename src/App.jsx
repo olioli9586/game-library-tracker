@@ -499,19 +499,49 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, toast 
       </div>
 
       {configured ? (
-        <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-line">
-          <button onClick={handlePull} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-wood/10 text-wood border border-wood/40 hover:bg-wood/20 disabled:opacity-40">
-            ↓ Pull from cloud
-          </button>
-          <button onClick={handlePush} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-wood/10 text-wood border border-wood/40 hover:bg-wood/20 disabled:opacity-40">
-            ↑ Push now
-          </button>
-          <span className="text-xs text-faint font-mono ml-1">
-            gist {sync.getGistId().slice(0, 8)}… · token {sync.maskToken(sync.getToken())}
-          </span>
-          <button onClick={handleDisconnect} disabled={busy} className="ml-auto text-xs font-semibold text-clay hover:underline">
-            Disconnect
-          </button>
+        <div className="space-y-3 pt-2 border-t border-line">
+          <div className="flex flex-wrap gap-2 items-center">
+            <button onClick={handlePull} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-wood/10 text-wood border border-wood/40 hover:bg-wood/20 disabled:opacity-40">
+              ↓ Pull from cloud
+            </button>
+            <button onClick={handlePush} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-wood/10 text-wood border border-wood/40 hover:bg-wood/20 disabled:opacity-40">
+              ↑ Push now
+            </button>
+            <button onClick={handleDisconnect} disabled={busy} className="ml-auto text-xs font-semibold text-clay hover:underline">
+              Disconnect
+            </button>
+          </div>
+          <div className="bg-cream border border-line rounded-lg p-3 space-y-2">
+            <div className="text-xs font-bold text-fade uppercase tracking-wider">Use this on your other devices</div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs font-mono text-ink bg-paper border border-line rounded px-2.5 py-1.5 break-all select-all">
+                {sync.getGistId()}
+              </code>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(sync.getGistId());
+                    toast("Gist ID copied — paste it on your other device.", "success");
+                  } catch {
+                    toast("Couldn't copy automatically — long-press the ID and copy.", "error");
+                  }
+                }}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-wood hover:bg-wood-dark text-cream whitespace-nowrap"
+              >
+                Copy ID
+              </button>
+            </div>
+            <p className="text-xs text-faint">
+              On your phone: open this app → Export / Import → Set up sync → paste the same token + this gist ID.
+            </p>
+            <a
+              href={`https://gist.github.com/${sync.getGistId()}`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-block text-xs text-wood hover:text-wood-dark underline"
+            >
+              View gist on GitHub →
+            </a>
+          </div>
         </div>
       ) : !setupOpen ? (
         <button onClick={() => setSetupOpen(true)} className="w-full mt-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-wood hover:bg-wood-dark text-cream transition-colors">
