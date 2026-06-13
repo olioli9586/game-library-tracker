@@ -22,12 +22,15 @@ const PLATFORM_COLORS = {
 
 const SOURCES = {
   purchased: { label: "Purchased", permanent: true },
-  ps_plus_monthly: { label: "PS Plus Monthly", permanent: false },
-  ps_plus_catalog: { label: "PS Plus Catalog", permanent: false },
+  physical: { label: "Physical", permanent: true },
+  free: { label: "Free / Giveaway", permanent: true },
   epic_free: { label: "Epic Free", permanent: true },
   prime_gaming: { label: "Prime Gaming (Claimed)", permanent: true },
+  ps_plus_monthly: { label: "PS Plus Monthly", permanent: false },
+  ps_plus_catalog: { label: "PS Plus Catalog", permanent: false },
   prime_gaming_catalog: { label: "Prime Collection", permanent: false },
-  physical: { label: "Physical", permanent: true },
+  nintendo_online: { label: "Nintendo Online", permanent: false },
+  game_pass: { label: "Game Pass", permanent: false },
 };
 
 const STATUSES = {
@@ -39,7 +42,7 @@ const STATUSES = {
   on_hold: { label: "On Hold", cls: "bg-honey/10 text-honey border-honey/30" },
 };
 
-const SUB_SOURCES = ["ps_plus_monthly", "ps_plus_catalog", "prime_gaming_catalog"];
+const SUB_SOURCES = ["ps_plus_monthly", "ps_plus_catalog", "prime_gaming_catalog", "nintendo_online", "game_pass"];
 const isSubDependent = (g) => SUB_SOURCES.includes(g.source);
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -56,23 +59,23 @@ function sourcesForPlatform(platform, current) {
   switch (platform) {
     case "NS1":
     case "NS2":
-      list = ["purchased", "physical"];
+      list = ["purchased", "physical", "free", "nintendo_online"];
       break;
     case "PS4":
     case "PS5":
-      list = ["purchased", "physical", "ps_plus_monthly", "ps_plus_catalog"];
+      list = ["purchased", "physical", "free", "ps_plus_monthly", "ps_plus_catalog"];
       break;
     case "Steam":
-      list = ["purchased", "prime_gaming"];
+      list = ["purchased", "free", "prime_gaming", "game_pass"];
       break;
     case "Epic":
-      list = ["purchased", "epic_free", "prime_gaming"];
+      list = ["purchased", "epic_free", "free", "prime_gaming"];
       break;
     case "GOG":
-      list = ["purchased", "prime_gaming"];
+      list = ["purchased", "free", "prime_gaming"];
       break;
     case "Prime":
-      list = ["prime_gaming", "prime_gaming_catalog"];
+      list = ["prime_gaming", "prime_gaming_catalog", "free"];
       break;
     default:
       list = Object.keys(SOURCES);
