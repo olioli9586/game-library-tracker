@@ -6,13 +6,13 @@
   --font-mono: "IBM Plex Mono", monospace;
 
   /* warm paper & wood palette */
-  --color-paper: #efe6d3;   /* page background */
-  --color-cream: #faf5e9;   /* cards, inputs */
-  --color-card: #f6efdf;    /* secondary surfaces */
-  --color-ink: #352a1e;     /* primary text */
-  --color-fade: #82715a;    /* muted text */
-  --color-faint: #a8957a;   /* faintest text */
-  --color-line: #ddcfb2;    /* borders */
+  --color-paper: #f5ecd6;   /* page background */
+  --color-cream: #fdf8ec;   /* cards, inputs */
+  --color-card: #f9f2dd;    /* secondary surfaces */
+  --color-ink: #3b2f20;     /* primary text */
+  --color-fade: #8a7860;    /* muted text */
+  --color-faint: #b09c80;   /* faintest text */
+  --color-line: #e3d5b6;    /* borders */
   --color-wood: #6e4b2a;    /* primary accent */
   --color-wood-dark: #59391c;
   --color-sage: #58743d;    /* success */
@@ -23,16 +23,16 @@
 }
 
 html {
-  background-color: #efe6d3;
+  background-color: #f5ecd6;
 }
 
 body {
   font-family: var(--font-sans);
-  color: #352a1e;
+  color: #3b2f20;
   background:
-    radial-gradient(1100px 500px at 75% -10%, rgba(255, 251, 240, 0.9), transparent 60%),
-    radial-gradient(900px 600px at -5% 25%, rgba(168, 124, 70, 0.1), transparent 55%),
-    #efe6d3;
+    radial-gradient(1100px 500px at 75% -10%, rgba(255, 253, 245, 0.85), transparent 60%),
+    radial-gradient(900px 600px at -5% 25%, rgba(168, 124, 70, 0.08), transparent 55%),
+    #f5ecd6;
   min-height: 100vh;
 }
 

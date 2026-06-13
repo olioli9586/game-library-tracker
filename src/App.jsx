@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 /* ------------------------------------------------------------------ */
 
 const STORAGE_KEY = "game_library_v2";
+const SUBS_KEY = "game_subscriptions_v1";
 
 const PLATFORMS = ["NS1", "NS2", "PS4", "PS5", "Steam", "Epic", "GOG", "Prime"];
 
@@ -108,6 +109,36 @@ const csvEscape = (v) => {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
+
+function daysBetween(endISO) {
+  const end = new Date(endISO + "T23:59:59");
+  const now = new Date();
+  return Math.floor((end - now) / (1000 * 60 * 60 * 24));
+}
+
+function addMonths(isoDate, months) {
+  const base = new Date(isoDate + "T12:00:00");
+  if (Number.isNaN(base.getTime())) return isoDate;
+  const start = base < new Date() ? new Date() : base;
+  const next = new Date(start);
+  next.setMonth(next.getMonth() + months);
+  return next.toISOString().slice(0, 10);
+}
+
+const SAMPLE_SUBS = [
+  { id: "sub-sample-1", name: "PS Plus Extra", endDate: new Date(Date.now() + 42 * 86400000).toISOString().slice(0, 10), notes: "" },
+];
+
+function sanitizeSub(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (!raw.name || !raw.endDate) return null;
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(),
+    name: String(raw.name),
+    endDate: String(raw.endDate).slice(0, 10),
+    notes: typeof raw.notes === "string" ? raw.notes : "",
+  };
+}
 
 function sanitizeGame(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -236,7 +267,6 @@ function AddEditModal({ game, games, onSave, onClose }) {
   const [source, setSource] = useState(game?.source ?? "purchased");
   const [status, setStatus] = useState(game?.status ?? "backlog");
   const [rating, setRating] = useState(game?.rating?.toString() ?? "");
-  const [hours, setHours] = useState(game?.hoursPlayed?.toString() ?? "");
   const [notes, setNotes] = useState(game?.notes ?? "");
   const [leavingSoon, setLeavingSoon] = useState(game?.leavingSoon ?? false);
   const [error, setError] = useState("");
@@ -266,7 +296,6 @@ function AddEditModal({ game, games, onSave, onClose }) {
       return;
     }
     const ratingNum = rating === "" ? undefined : Math.min(10, Math.max(1, Number(rating)));
-    const hoursNum = hours === "" ? undefined : Math.max(0, Number(hours));
     const next = {
       id: game?.id ?? crypto.randomUUID(),
       title: title.trim(),
@@ -276,7 +305,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
       dateAdded: game?.dateAdded ?? todayISO(),
     };
     if (ratingNum !== undefined && !Number.isNaN(ratingNum)) next.rating = ratingNum;
-    if (hoursNum !== undefined && !Number.isNaN(hoursNum)) next.hoursPlayed = hoursNum;
+    if (game?.hoursPlayed !== undefined) next.hoursPlayed = game.hoursPlayed;
     if (notes.trim()) next.notes = notes.trim();
     if (subDep && leavingSoon) next.leavingSoon = true;
     if (status === "completed") next.completedDate = game?.completedDate ?? todayISO();
@@ -340,11 +369,6 @@ function AddEditModal({ game, games, onSave, onClose }) {
               <label className={label}>Rating (1–10)</label>
               <input type="number" min="1" max="10" value={rating} onChange={(e) => setRating(e.target.value)} className={field} placeholder="—" />
             </div>
-          </div>
-
-          <div>
-            <label className={label}>Hours played</label>
-            <input type="number" min="0" step="0.1" value={hours} onChange={(e) => setHours(e.target.value)} className={field} placeholder="—" />
           </div>
 
           {subDep && (
@@ -665,6 +689,174 @@ function FilterBar({ filters, setFilters }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Subscriptions                                                        */
+/* ------------------------------------------------------------------ */
+
+function SubscriptionCard({ sub, onEdit, onRenew }) {
+  const days = daysBetween(sub.endDate);
+  let tone, label;
+  if (days < 0) {
+    tone = "expired";
+    label = `Expired ${-days} day${-days === 1 ? "" : "s"} ago`;
+  } else if (days === 0) {
+    tone = "danger";
+    label = "Expires today";
+  } else if (days <= 7) {
+    tone = "danger";
+    label = `${days} day${days === 1 ? "" : "s"} left`;
+  } else if (days <= 30) {
+    tone = "warn";
+    label = `${days} days left`;
+  } else {
+    tone = "ok";
+    label = `${days} days left`;
+  }
+
+  const toneClasses = {
+    ok: "border-sage/40 bg-sage/5",
+    warn: "border-honey/40 bg-honey/5",
+    danger: "border-clay/50 bg-clay/5",
+    expired: "border-clay/60 bg-clay/10",
+  };
+  const toneText = {
+    ok: "text-sage",
+    warn: "text-honey",
+    danger: "text-clay",
+    expired: "text-clay",
+  };
+
+  return (
+    <div className={`rounded-xl border-2 px-4 py-3 ${toneClasses[tone]}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-display text-base font-semibold text-ink truncate">{sub.name}</div>
+          <div className="text-xs text-fade font-mono mt-0.5">Renews {sub.endDate}</div>
+          {sub.notes && <div className="text-xs text-faint mt-1 italic truncate" title={sub.notes}>{sub.notes}</div>}
+        </div>
+        <div className={`text-sm font-bold whitespace-nowrap ${toneText[tone]}`}>{label}</div>
+      </div>
+      <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-line/60">
+        <QuickActionButton tone="wood" onClick={() => onRenew(sub, 1)}>+1 mo</QuickActionButton>
+        <QuickActionButton tone="wood" onClick={() => onRenew(sub, 3)}>+3 mo</QuickActionButton>
+        <QuickActionButton tone="wood" onClick={() => onRenew(sub, 12)}>+1 yr</QuickActionButton>
+        <button onClick={() => onEdit(sub)} className="ml-auto text-xs font-semibold text-fade hover:text-ink underline underline-offset-2">
+          Edit
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SubscriptionsPanel({ subs, onAdd, onEdit, onRenew }) {
+  const [open, setOpen] = useState(true);
+  const expiringCount = subs.filter((s) => daysBetween(s.endDate) <= 7).length;
+
+  return (
+    <section className="bg-cream/80 border border-line rounded-2xl overflow-hidden shadow-sm shadow-wood-dark/5">
+      <div className="w-full flex items-center justify-between px-4 py-3 gap-3">
+        <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-3 text-left hover:opacity-80">
+          <span className="font-display font-semibold text-base text-ink">Subscriptions</span>
+          <span className="text-xs text-fade font-mono">{subs.length} tracked</span>
+          {expiringCount > 0 && (
+            <span className="text-xs font-semibold text-clay bg-clay/10 border border-clay/30 px-2 py-0.5 rounded-full">
+              {expiringCount} expiring soon
+            </span>
+          )}
+        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onAdd}
+            className="text-xs font-semibold px-3 py-1.5 rounded-full bg-wood hover:bg-wood-dark text-cream transition-colors"
+          >
+            + Add
+          </button>
+          <button onClick={() => setOpen((v) => !v)} className="text-faint text-xs px-1">{open ? "▲" : "▼"}</button>
+        </div>
+      </div>
+      {open && (
+        <div className="px-4 pb-4 anim-rise">
+          {subs.length === 0 ? (
+            <p className="text-sm text-faint italic py-4 text-center">
+              No subscriptions tracked yet. Add PS Plus, Prime Gaming, Xbox Game Pass, etc. to see countdown timers.
+            </p>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-2.5">
+              {subs.map((s) => (
+                <SubscriptionCard key={s.id} sub={s} onEdit={onEdit} onRenew={onRenew} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SubscriptionModal({ sub, onSave, onDelete, onClose }) {
+  const editing = !!sub;
+  const [name, setName] = useState(sub?.name ?? "");
+  const [endDate, setEndDate] = useState(sub?.endDate ?? todayISO());
+  const [notes, setNotes] = useState(sub?.notes ?? "");
+  const [error, setError] = useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) { setError("Name is required."); return; }
+    if (!endDate) { setError("End date is required."); return; }
+    onSave({
+      id: sub?.id ?? crypto.randomUUID(),
+      name: name.trim(),
+      endDate,
+      notes: notes.trim(),
+    });
+  };
+
+  const field = "w-full bg-cream border border-line rounded-lg px-3 py-2 text-ink text-sm focus:outline-none focus:border-wood focus:ring-1 focus:ring-wood/40";
+  const label = "block text-xs font-bold text-fade uppercase tracking-wider mb-1.5";
+
+  return (
+    <Modal onClose={onClose}>
+      <form onSubmit={submit} className="p-5 sm:p-6">
+        <h2 className="font-display text-2xl font-semibold text-ink mb-5">
+          {editing ? "Edit Subscription" : "Add Subscription"}
+        </h2>
+        <div className="space-y-4">
+          <div>
+            <label className={label}>Name *</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={field} placeholder="e.g. PS Plus Extra, Prime Gaming, Game Pass Ultimate" autoFocus />
+          </div>
+          <div>
+            <label className={label}>Ends on *</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={field} />
+            <p className="text-xs text-faint mt-1">When you renew, click the +1mo / +3mo / +1yr buttons on the card.</p>
+          </div>
+          <div>
+            <label className={label}>Notes</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={field} placeholder="e.g. Annual plan, auto-renew off, paid $79.99" />
+          </div>
+        </div>
+        {error && <p className="mt-3 text-sm text-clay">{error}</p>}
+        <div className="mt-6 flex justify-between gap-2">
+          {editing && (
+            <button type="button" onClick={() => onDelete(sub)} className="px-4 py-2 rounded-lg text-sm font-semibold text-clay hover:bg-clay/10 transition-colors">
+              Delete
+            </button>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
+              Cancel
+            </button>
+            <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark text-cream transition-colors">
+              {editing ? "Save" : "Add"}
+            </button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Table / cards                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -674,7 +866,6 @@ const COLUMNS = [
   { key: "source", label: "Source" },
   { key: "status", label: "Status" },
   { key: "rating", label: "Rating" },
-  { key: "hoursPlayed", label: "Hours" },
   { key: "dateAdded", label: "Added" },
 ];
 
@@ -724,7 +915,6 @@ function GameTable({ games, sort, setSort, onEdit, onDelete }) {
                   <td className="px-3 py-2.5"><SourceBadge source={g.source} leavingSoon={g.leavingSoon} /></td>
                   <td className="px-3 py-2.5"><StatusBadge status={g.status} /></td>
                   <td className="px-3 py-2.5 font-mono text-ink">{g.rating ?? <span className="text-faint">—</span>}</td>
-                  <td className="px-3 py-2.5 font-mono text-ink">{g.hoursPlayed ?? <span className="text-faint">—</span>}</td>
                   <td className="px-3 py-2.5 font-mono text-xs text-fade">{g.dateAdded}</td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap">
                     <IconButton onClick={() => onEdit(g)} title="Edit">✎</IconButton>
@@ -800,6 +990,7 @@ const TABS = [
 
 export default function App() {
   const [games, setGames] = useState(null); // null = not loaded yet
+  const [subs, setSubs] = useState([]);
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState("all");
   const [filters, setFilters] = useState({ platforms: [], sources: [], statuses: [], subRisk: false, leavingSoon: false });
@@ -829,7 +1020,26 @@ export default function App() {
       setGames(SAMPLE_DATA);
       toast("Could not load saved library — starting with sample data.", "error");
     }
+    try {
+      const raw = localStorage.getItem(SUBS_KEY);
+      if (raw === null) {
+        setSubs(SAMPLE_SUBS);
+      } else {
+        const parsed = JSON.parse(raw);
+        setSubs(Array.isArray(parsed) ? parsed.map(sanitizeSub).filter(Boolean) : []);
+      }
+    } catch {
+      setSubs([]);
+    }
   }, [toast]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SUBS_KEY, JSON.stringify(subs));
+    } catch {
+      /* ignore */
+    }
+  }, [subs]);
 
   useEffect(() => {
     if (games === null) return;
@@ -944,6 +1154,27 @@ export default function App() {
     });
     setModal(null);
     toast(mode === "overwrite" ? `Imported ${incoming.length} games (conflicts overwritten).` : `Imported new games, skipped existing ones.`, "success");
+  };
+
+  const saveSub = (s) => {
+    setSubs((ss) => {
+      const exists = ss.some((x) => x.id === s.id);
+      return exists ? ss.map((x) => (x.id === s.id ? s : x)) : [...ss, s];
+    });
+    setModal(null);
+    toast(`Saved subscription "${s.name}".`, "success");
+  };
+
+  const deleteSub = (s) => {
+    setSubs((ss) => ss.filter((x) => x.id !== s.id));
+    setModal(null);
+    toast(`Removed "${s.name}".`, "success");
+  };
+
+  const renewSub = (s, months) => {
+    const next = { ...s, endDate: addMonths(s.endDate, months) };
+    setSubs((ss) => ss.map((x) => (x.id === s.id ? next : x)));
+    toast(`"${s.name}" renewed — now ends ${next.endDate}.`, "success");
   };
 
   const handleSteamImport = (list) => {
@@ -1136,7 +1367,15 @@ export default function App() {
         </nav>
 
         <div className="space-y-4">
-          <div className="anim-rise" style={{ animationDelay: "140ms" }}>
+          <div className="anim-rise" style={{ animationDelay: "120ms" }}>
+            <SubscriptionsPanel
+              subs={subs}
+              onAdd={() => setModal({ type: "sub-add" })}
+              onEdit={(s) => setModal({ type: "sub-edit", sub: s })}
+              onRenew={renewSub}
+            />
+          </div>
+          <div className="anim-rise" style={{ animationDelay: "160ms" }}>
             <StatsPanel games={games} />
           </div>
 
@@ -1256,6 +1495,12 @@ export default function App() {
       {modal?.type === "edit" && <AddEditModal game={modal.game} games={games} onSave={upsertGame} onClose={() => setModal(null)} />}
       {modal?.type === "io" && (
         <ExportImportModal games={games} onClose={() => setModal(null)} onImportParsed={handleImportParsed} onSteamImport={handleSteamImport} toast={toast} />
+      )}
+      {modal?.type === "sub-add" && (
+        <SubscriptionModal onSave={saveSub} onDelete={deleteSub} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === "sub-edit" && (
+        <SubscriptionModal sub={modal.sub} onSave={saveSub} onDelete={deleteSub} onClose={() => setModal(null)} />
       )}
       {modal?.type === "delete" && (
         <Modal onClose={() => setModal(null)}>
