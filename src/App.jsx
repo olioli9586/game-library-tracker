@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as sync from "./sync.js";
 
 /* ------------------------------------------------------------------ */
 /* Constants & helpers                                                  */
@@ -406,7 +407,167 @@ function AddEditModal({ game, games, onSave, onClose }) {
 /* Export / Import panel                                                */
 /* ------------------------------------------------------------------ */
 
-function ExportImportModal({ games, onClose, onImportParsed, onSteamImport, toast }) {
+function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, toast }) {
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [token, setToken] = useState("");
+  const [gistId, setGistId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const configured = sync.isConfigured();
+
+  const handleConnect = async () => {
+    if (!token.trim()) { toast("Paste a token first.", "error"); return; }
+    setBusy(true);
+    try {
+      await sync.validateToken(token.trim());
+      let id = gistId.trim();
+      if (!id) {
+        id = await sync.createGist(token.trim(), games, subs);
+        toast("New private gist created — your library is now in the cloud.", "success");
+      } else {
+        toast("Connected to existing gist.", "success");
+      }
+      sync.saveCreds(token.trim(), id);
+      setToken(""); setGistId(""); setSetupOpen(false);
+      setSyncState({ state: "ok", at: new Date().toISOString() });
+      // If a gist ID was provided, pull from it
+      if (gistId.trim()) {
+        const { data } = await sync.pull();
+        if (data) onPulled(data);
+      }
+    } catch (e) {
+      toast(`Connect failed: ${e.message}`, "error");
+    } finally { setBusy(false); }
+  };
+
+  const handlePush = async () => {
+    setBusy(true); setSyncState({ state: "syncing" });
+    try {
+      await sync.push(games, subs);
+      setSyncState({ state: "ok", at: new Date().toISOString() });
+      toast("Pushed to cloud.", "success");
+    } catch (e) {
+      setSyncState({ state: "error", message: e.message });
+      toast(`Push failed: ${e.message}`, "error");
+    } finally { setBusy(false); }
+  };
+
+  const handlePull = async () => {
+    setBusy(true); setSyncState({ state: "syncing" });
+    try {
+      const { data } = await sync.pull();
+      if (!data) { toast("Cloud gist is empty or unreadable.", "error"); return; }
+      onPulled(data);
+      sync.setLastSync(new Date().toISOString());
+      setSyncState({ state: "ok", at: new Date().toISOString() });
+      toast(`Pulled ${data.games.length} games from cloud.`, "success");
+    } catch (e) {
+      setSyncState({ state: "error", message: e.message });
+      toast(`Pull failed: ${e.message}`, "error");
+    } finally { setBusy(false); }
+  };
+
+  const handleDisconnect = () => {
+    if (!confirm("Disconnect cloud sync? Your library stays on this device; the cloud gist is untouched.")) return;
+    sync.clearCreds();
+    setSyncState({ state: "off" });
+    toast("Disconnected.", "success");
+  };
+
+  const statusDot = {
+    off: "bg-faint",
+    ok: "bg-sage",
+    syncing: "bg-honey animate-pulse",
+    error: "bg-clay",
+  }[syncState.state] || "bg-faint";
+
+  const statusLabel = configured
+    ? syncState.state === "syncing" ? "Syncing…"
+      : syncState.state === "error" ? `Error · ${syncState.message ?? ""}`
+      : syncState.at ? `Synced ${sync.relativeTime(syncState.at)}`
+      : "Connected · not synced yet"
+    : "Not connected";
+
+  return (
+    <div className="bg-card border border-line rounded-2xl p-4 mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <span className={`w-2.5 h-2.5 rounded-full ${statusDot}`}></span>
+          <span className="font-display font-semibold text-ink text-base">Cloud Sync</span>
+          <span className="text-xs text-fade">via private GitHub Gist</span>
+        </div>
+        <span className="text-xs text-fade font-mono">{statusLabel}</span>
+      </div>
+
+      {configured ? (
+        <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-line">
+          <button onClick={handlePull} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-wood/10 text-wood border border-wood/40 hover:bg-wood/20 disabled:opacity-40">
+            ↓ Pull from cloud
+          </button>
+          <button onClick={handlePush} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-wood/10 text-wood border border-wood/40 hover:bg-wood/20 disabled:opacity-40">
+            ↑ Push now
+          </button>
+          <span className="text-xs text-faint font-mono ml-1">
+            gist {sync.getGistId().slice(0, 8)}… · token {sync.maskToken(sync.getToken())}
+          </span>
+          <button onClick={handleDisconnect} disabled={busy} className="ml-auto text-xs font-semibold text-clay hover:underline">
+            Disconnect
+          </button>
+        </div>
+      ) : !setupOpen ? (
+        <button onClick={() => setSetupOpen(true)} className="w-full mt-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-wood hover:bg-wood-dark text-cream transition-colors">
+          Set up sync across devices
+        </button>
+      ) : (
+        <div className="space-y-3 pt-2 border-t border-line">
+          <div className="text-xs text-fade leading-relaxed bg-honey/10 border border-honey/30 rounded-lg p-3">
+            <strong className="text-honey">Important:</strong> Don't paste this token anywhere except here. It only goes to GitHub's API from your browser.<br/>
+            <strong className="text-ink mt-1 block">How to get one (60 seconds):</strong>
+            <ol className="list-decimal ml-5 mt-1 space-y-0.5 text-ink/80">
+              <li>Open <a href="https://github.com/settings/tokens/new?description=Game%20Vault%20sync&scopes=gist" target="_blank" rel="noopener noreferrer" className="text-wood underline font-mono break-all">github.com/settings/tokens/new</a></li>
+              <li>Note: "Game Vault sync" · Expiration: No expiration (or 1 year)</li>
+              <li>Scope: check <strong>gist</strong> only — nothing else</li>
+              <li>Generate token → copy it (starts with <code className="font-mono">ghp_</code>) → paste below</li>
+            </ol>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-fade uppercase tracking-wider mb-1.5">GitHub Personal Access Token *</label>
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              className="w-full bg-cream border border-line rounded-lg px-3 py-2 text-ink text-sm font-mono focus:outline-none focus:border-wood"
+              autoComplete="off"
+              spellCheck="false"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-fade uppercase tracking-wider mb-1.5">Existing gist ID (optional)</label>
+            <input
+              value={gistId}
+              onChange={(e) => setGistId(e.target.value)}
+              placeholder="Leave empty on first device · paste gist ID on other devices"
+              className="w-full bg-cream border border-line rounded-lg px-3 py-2 text-ink text-sm font-mono focus:outline-none focus:border-wood"
+              autoComplete="off"
+              spellCheck="false"
+            />
+            <p className="text-xs text-faint mt-1">First device: leave blank, a new private gist is made. After that, copy the gist ID shown here onto your other devices.</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setSetupOpen(false); setToken(""); setGistId(""); }} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
+              Cancel
+            </button>
+            <button onClick={handleConnect} disabled={busy || !token.trim()} className="px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark disabled:opacity-40 disabled:cursor-not-allowed text-cream transition-colors">
+              {busy ? "Connecting…" : "Connect"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onClose, onImportParsed, onSteamImport, toast }) {
   const fileRef = useRef(null);
   const [steamOpen, setSteamOpen] = useState(false);
   const [steamText, setSteamText] = useState("");
@@ -458,10 +619,19 @@ function ExportImportModal({ games, onClose, onImportParsed, onSteamImport, toas
   return (
     <Modal onClose={onClose} wide>
       <div className="p-5 sm:p-6">
-        <h2 className="font-display text-2xl font-semibold text-ink mb-1">Export / Import</h2>
-        <p className="text-sm text-fade mb-5">
-          Your library lives in this browser. Export a JSON backup regularly.
+        <h2 className="font-display text-2xl font-semibold text-ink mb-1">Sync & Backup</h2>
+        <p className="text-sm text-fade mb-4">
+          Set up cloud sync to share your library between phone and computer. Or export a JSON backup at any time.
         </p>
+
+        <CloudSyncPanel
+          games={games}
+          subs={subs}
+          syncState={syncState}
+          setSyncState={setSyncState}
+          onPulled={onPulled}
+          toast={toast}
+        />
 
         <div className="grid sm:grid-cols-2 gap-3">
           <button onClick={exportJSON} className={btn}>
@@ -1157,8 +1327,12 @@ export default function App() {
   const [sort, setSort] = useState({ key: "dateAdded", dir: "desc" });
   const [modal, setModal] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [syncState, setSyncState] = useState({ state: sync.isConfigured() ? "ok" : "off", at: sync.getLastSync() });
   const searchRef = useRef(null);
   const loadedRef = useRef(false);
+  const applyingRemoteRef = useRef(false);
+  const pushTimerRef = useRef(null);
+  const initialPullDoneRef = useRef(false);
 
   const toast = useCallback((msg, type = "info") => {
     const id = crypto.randomUUID();
@@ -1212,6 +1386,53 @@ export default function App() {
       toast("Failed to save your library (storage full or blocked).", "error");
     }
   }, [games, toast]);
+
+  // Initial pull on load (if sync configured)
+  useEffect(() => {
+    if (games === null) return;
+    if (initialPullDoneRef.current) return;
+    initialPullDoneRef.current = true;
+    if (!sync.isConfigured()) return;
+    setSyncState((s) => ({ ...s, state: "syncing" }));
+    sync.pull()
+      .then(({ data }) => {
+        if (data?.games?.length >= 0) {
+          applyingRemoteRef.current = true;
+          setGames(data.games);
+          setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
+          sync.setLastSync(new Date().toISOString());
+          setSyncState({ state: "ok", at: new Date().toISOString() });
+        }
+      })
+      .catch((e) => {
+        setSyncState({ state: "error", message: e.message });
+        toast(`Cloud pull failed: ${e.message}`, "error");
+      });
+  }, [games, toast]);
+
+  // Debounced auto-push when games/subs change
+  useEffect(() => {
+    if (games === null) return;
+    if (!sync.isConfigured()) return;
+    if (applyingRemoteRef.current) { applyingRemoteRef.current = false; return; }
+    clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = setTimeout(async () => {
+      setSyncState((s) => ({ ...s, state: "syncing" }));
+      try {
+        await sync.push(games, subs);
+        setSyncState({ state: "ok", at: new Date().toISOString() });
+      } catch (e) {
+        setSyncState({ state: "error", message: e.message });
+      }
+    }, 2000);
+    return () => clearTimeout(pushTimerRef.current);
+  }, [games, subs]);
+
+  const handlePulled = useCallback((data) => {
+    applyingRemoteRef.current = true;
+    setGames(data.games);
+    setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
+  }, []);
 
   /* ---- keyboard shortcuts ---- */
   useEffect(() => {
@@ -1454,8 +1675,22 @@ export default function App() {
             <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-[#f5ead3]">
               Game <span className="italic text-[#e8c896]">Vault</span>
             </h1>
-            <p className="text-xs mt-1.5 font-mono text-[#d8c2a0]/80">
-              {games.length} games · NS1 / NS2 / PS / Steam / Epic / GOG / Prime
+            <p className="text-xs mt-1.5 font-mono text-[#d8c2a0]/80 flex items-center gap-2">
+              <span>{games.length} games · NS1 / NS2 / PS / Steam / Epic / GOG / Prime</span>
+              {sync.isConfigured() && (
+                <button
+                  onClick={() => setModal({ type: "io" })}
+                  title={syncState.state === "ok" ? `Synced ${sync.relativeTime(syncState.at)}` : syncState.state === "syncing" ? "Syncing…" : syncState.state === "error" ? syncState.message : "Connected"}
+                  className="inline-flex items-center gap-1 hover:opacity-80"
+                >
+                  <span className={`w-2 h-2 rounded-full ${
+                    syncState.state === "ok" ? "bg-emerald-300" :
+                    syncState.state === "syncing" ? "bg-amber-300 animate-pulse" :
+                    syncState.state === "error" ? "bg-red-300" : "bg-[#d8c2a0]"
+                  }`}></span>
+                  <span className="text-[10px] uppercase tracking-wider">cloud</span>
+                </button>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1675,7 +1910,17 @@ export default function App() {
       {modal?.type === "add" && <AddEditModal games={games} onSave={upsertGame} onClose={() => setModal(null)} />}
       {modal?.type === "edit" && <AddEditModal game={modal.game} games={games} onSave={upsertGame} onClose={() => setModal(null)} />}
       {modal?.type === "io" && (
-        <ExportImportModal games={games} onClose={() => setModal(null)} onImportParsed={handleImportParsed} onSteamImport={handleSteamImport} toast={toast} />
+        <ExportImportModal
+          games={games}
+          subs={subs}
+          syncState={syncState}
+          setSyncState={setSyncState}
+          onPulled={handlePulled}
+          onClose={() => setModal(null)}
+          onImportParsed={handleImportParsed}
+          onSteamImport={handleSteamImport}
+          toast={toast}
+        />
       )}
       {modal?.type === "sub-add" && (
         <SubscriptionModal onSave={saveSub} onDelete={deleteSub} onClose={() => setModal(null)} />
