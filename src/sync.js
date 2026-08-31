@@ -1,6 +1,7 @@
 const TOKEN_KEY = "game_sync_token_v1";
 const GIST_KEY = "game_sync_gist_id_v1";
 const LAST_KEY = "game_sync_last_v1";
+const SEEN_KEY = "game_sync_seen_v1"; // exportedAt of the cloud copy this device last pushed or pulled
 const GIST_FILE = "game_vault.json";
 const API = "https://api.github.com";
 
@@ -17,9 +18,14 @@ export function clearCreds() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(GIST_KEY);
   localStorage.removeItem(LAST_KEY);
+  localStorage.removeItem(SEEN_KEY);
 }
 export function setLastSync(iso) {
   localStorage.setItem(LAST_KEY, iso);
+}
+export const getSeen = () => localStorage.getItem(SEEN_KEY) || "";
+export function setSeen(iso) {
+  if (iso) localStorage.setItem(SEEN_KEY, iso);
 }
 
 async function gh(path, options = {}, token = getToken()) {
@@ -69,12 +75,24 @@ export async function pull() {
   const gistId = getGistId();
   if (!gistId) throw new Error("No gist configured");
   const gist = await gh(`/gists/${gistId}`);
-  return { data: parseContent(gist), updatedAt: gist.updated_at };
+  const data = parseContent(gist);
+  if (data?.exportedAt) setSeen(data.exportedAt);
+  return { data, updatedAt: gist.updated_at };
 }
 
-export async function push(games, subs) {
+export async function push(games, subs, { force = false } = {}) {
   const gistId = getGistId();
   if (!gistId) throw new Error("No gist configured");
+  if (!force) {
+    // Safety check: refuse to overwrite a cloud copy this device has never seen
+    // (i.e. another device pushed since our last pull/push).
+    const gist = await gh(`/gists/${gistId}`);
+    const remote = parseContent(gist);
+    const seen = getSeen();
+    if (remote?.exportedAt && seen && remote.exportedAt !== seen) {
+      return { conflict: true, remote };
+    }
+  }
   const payload = buildPayload(games, subs);
   await gh(`/gists/${gistId}`, {
     method: "PATCH",
@@ -83,7 +101,8 @@ export async function push(games, subs) {
     }),
   });
   setLastSync(new Date().toISOString());
-  return payload;
+  setSeen(payload.exportedAt);
+  return { conflict: false, payload };
 }
 
 export async function createGist(token, games, subs) {
@@ -100,6 +119,7 @@ export async function createGist(token, games, subs) {
     },
     token
   );
+  setSeen(payload.exportedAt);
   return gist.id;
 }
 

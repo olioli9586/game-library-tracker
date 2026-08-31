@@ -426,7 +426,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
 /* Export / Import panel                                                */
 /* ------------------------------------------------------------------ */
 
-function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, toast }) {
+function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConflict, toast }) {
   const [setupOpen, setSetupOpen] = useState(false);
   const [token, setToken] = useState("");
   const [gistId, setGistId] = useState("");
@@ -461,7 +461,12 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, toast 
   const handlePush = async () => {
     setBusy(true); setSyncState({ state: "syncing" });
     try {
-      await sync.push(games, subs);
+      const res = await sync.push(games, subs);
+      if (res.conflict) {
+        setSyncState({ state: "error", message: "cloud changed on another device" });
+        onConflict(res.remote);
+        return;
+      }
       setSyncState({ state: "ok", at: new Date().toISOString() });
       toast("Pushed to cloud.", "success");
     } catch (e) {
@@ -750,7 +755,7 @@ function BulkPastePanel({ games, onImport, toast }) {
   );
 }
 
-function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onClose, onImportParsed, onSteamImport, toast }) {
+function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onConflict, onClose, onImportParsed, onSteamImport, toast }) {
   const fileRef = useRef(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [steamOpen, setSteamOpen] = useState(false);
@@ -814,6 +819,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
           syncState={syncState}
           setSyncState={setSyncState}
           onPulled={onPulled}
+          onConflict={onConflict}
           toast={toast}
         />
 
@@ -1609,7 +1615,13 @@ export default function App() {
     pushTimerRef.current = setTimeout(async () => {
       setSyncState((s) => ({ ...s, state: "syncing" }));
       try {
-        await sync.push(games, subs);
+        const res = await sync.push(games, subs);
+        if (res.conflict) {
+          setSyncState({ state: "error", message: "cloud changed on another device" });
+          // Don't steal focus from a modal the user is in — the conflict resurfaces on the next push
+          setModal((m) => m ?? { type: "sync-conflict", remote: res.remote });
+          return;
+        }
         setSyncState({ state: "ok", at: new Date().toISOString() });
       } catch (e) {
         setSyncState({ state: "error", message: e.message });
@@ -1623,6 +1635,28 @@ export default function App() {
     setGames(data.games);
     setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
   }, []);
+
+  const resolveSyncConflict = async (mode) => {
+    const remote = modal.remote;
+    setModal(null);
+    if (mode === "cloud") {
+      handlePulled(remote);
+      sync.setSeen(remote.exportedAt);
+      sync.setLastSync(new Date().toISOString());
+      setSyncState({ state: "ok", at: new Date().toISOString() });
+      toast(`Loaded cloud version (${remote.games.length} games).`, "success");
+    } else {
+      setSyncState({ state: "syncing" });
+      try {
+        await sync.push(games, subs, { force: true });
+        setSyncState({ state: "ok", at: new Date().toISOString() });
+        toast("Cloud overwritten with this device's library.", "success");
+      } catch (e) {
+        setSyncState({ state: "error", message: e.message });
+        toast(`Push failed: ${e.message}`, "error");
+      }
+    }
+  };
 
   /* ---- keyboard shortcuts ---- */
   useEffect(() => {
@@ -2106,6 +2140,7 @@ export default function App() {
           syncState={syncState}
           setSyncState={setSyncState}
           onPulled={handlePulled}
+          onConflict={(remote) => setModal({ type: "sync-conflict", remote })}
           onClose={() => setModal(null)}
           onImportParsed={handleImportParsed}
           onSteamImport={handleSteamImport}
@@ -2134,6 +2169,39 @@ export default function App() {
               </button>
               <button onClick={() => deleteGame(modal.game)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-clay hover:bg-[#8e3826] text-cream transition-colors">
                 Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {modal?.type === "sync-conflict" && (
+        <Modal onClose={() => setModal(null)}>
+          <div className="p-6">
+            <h2 className="font-display text-xl font-semibold text-ink mb-2">Sync conflict</h2>
+            <p className="text-sm text-fade mb-4 leading-relaxed">
+              The cloud copy was updated from another device{" "}
+              {modal.remote.exportedAt && <span className="font-mono text-ink">({sync.relativeTime(modal.remote.exportedAt)})</span>}
+              {" "}and this device hasn't seen those changes. To avoid losing anything, nothing was overwritten.
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-5 text-center">
+              <div className="bg-card border border-line rounded-xl px-3 py-2.5">
+                <div className="font-display text-2xl font-bold text-ink">{modal.remote.games.length}</div>
+                <div className="text-xs text-fade uppercase tracking-wider font-semibold mt-0.5">games in cloud</div>
+              </div>
+              <div className="bg-card border border-line rounded-xl px-3 py-2.5">
+                <div className="font-display text-2xl font-bold text-ink">{games.length}</div>
+                <div className="text-xs text-fade uppercase tracking-wider font-semibold mt-0.5">games on this device</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
+                Decide Later
+              </button>
+              <button onClick={() => resolveSyncConflict("cloud")} className="px-4 py-2 rounded-lg text-sm font-semibold border border-line text-ink hover:bg-card transition-colors">
+                Use Cloud Version
+              </button>
+              <button onClick={() => resolveSyncConflict("mine")} className="px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark text-cream transition-colors">
+                Keep This Device's
               </button>
             </div>
           </div>
