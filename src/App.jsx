@@ -108,6 +108,25 @@ function downloadFile(filename, content, mime) {
   URL.revokeObjectURL(url);
 }
 
+function parsePastedTitles(text) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of text.split(/\r?\n/)) {
+    let s = raw.replace(/^[\s•·\-–—*>]+/, "").replace(/[\s|]+$/, "").trim();
+    if (s.length < 2) continue;
+    // Skip lines that are just prices, numbers, or dates (store pages are full of them)
+    if (/^(NT\$|HK\$|US\$|\$|¥|€|£|USD|TWD|HKD)?\s*[\d,.]+\s*(元|USD|TWD|HKD)?$/i.test(s)) continue;
+    if (/^\d{4}[/.\-年]\s?\d{1,2}[/.\-月]\s?\d{1,2}\s?日?$/.test(s)) continue;
+    if (/^(free|included|purchased|owned|installed|download|已購買|已擁有|免費)$/i.test(s)) continue;
+    if (/^(PS3|PS4|PS5|PS VR2?|PC|Mac|Nintendo Switch( 2)?|Full game|Game|Add-on|Bundle|Demo|Your Library|Library|Sort by|Filter)$/i.test(s)) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
 const csvEscape = (v) => {
   if (v === undefined || v === null) return "";
   const s = String(v);
@@ -597,8 +616,143 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, toast 
   );
 }
 
+function BulkPastePanel({ games, onImport, toast }) {
+  const [text, setText] = useState("");
+  const [platform, setPlatform] = useState("PS5");
+  const [source, setSource] = useState("purchased");
+  const [status, setStatus] = useState("backlog");
+  const [preview, setPreview] = useState(null);
+
+  const sourceOptions = sourcesForPlatform(platform, null);
+  useEffect(() => {
+    if (!sourceOptions.includes(source)) setSource(sourceOptions[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [platform]);
+
+  const parse = () => {
+    const titles = parsePastedTitles(text);
+    if (titles.length === 0) {
+      toast("No game titles found in the pasted text.", "error");
+      return;
+    }
+    setPreview(
+      titles.map((t) => {
+        const dup = games.find((g) => fuzzyMatch(g.title, t)) || null;
+        return { title: t, dup, checked: !dup };
+      })
+    );
+  };
+
+  const toggleRow = (i) => setPreview((p) => p.map((row, j) => (j === i ? { ...row, checked: !row.checked } : row)));
+
+  const doImport = () => {
+    const chosen = preview.filter((p) => p.checked);
+    if (chosen.length === 0) {
+      toast("Nothing ticked to import.", "error");
+      return;
+    }
+    onImport(
+      chosen.map((p) => ({
+        id: crypto.randomUUID(),
+        title: p.title,
+        platform,
+        source,
+        status,
+        dateAdded: todayISO(),
+      }))
+    );
+    setText("");
+    setPreview(null);
+  };
+
+  const field = "bg-cream border border-line rounded-lg px-3 py-2 text-ink text-sm focus:outline-none focus:border-wood";
+  const label = "block text-xs font-bold text-fade uppercase tracking-wider mb-1.5";
+  const dupCount = preview ? preview.filter((p) => p.dup).length : 0;
+  const checkedCount = preview ? preview.filter((p) => p.checked).length : 0;
+
+  return (
+    <div className="mt-4 anim-rise">
+      <p className="text-xs text-fade mb-3 leading-relaxed">
+        Open your library page on the store's website — PlayStation: <span className="font-mono text-ink">library.playstation.com</span> · Epic:{" "}
+        <span className="font-mono text-ink">epicgames.com → Account → Apps</span> · GOG: <span className="font-mono text-ink">gog.com/account</span> · Prime:{" "}
+        <span className="font-mono text-ink">gaming.amazon.com</span> · Nintendo: <span className="font-mono text-ink">ec.nintendo.com order history</span>.
+        Select all the text on the page (Ctrl/Cmd-A), copy, and paste it below — prices, dates and junk lines are filtered out automatically.
+      </p>
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        <div>
+          <label className={label}>Platform</label>
+          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className={`${field} w-full`}>
+            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={label}>Source</label>
+          <select value={source} onChange={(e) => setSource(e.target.value)} className={`${field} w-full`}>
+            {sourceOptions.map((s) => <option key={s} value={s}>{SOURCES[s].label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={label}>Status</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${field} w-full`}>
+            {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => { setText(e.target.value); setPreview(null); }}
+        rows={5}
+        placeholder={"One game per line, or the whole copied page:\nGod of War Ragnarok\nStellar Blade\n..."}
+        className="w-full bg-cream border border-line rounded-lg px-3 py-2 text-ink text-xs font-mono focus:outline-none focus:border-wood"
+      />
+      {preview === null ? (
+        <button
+          onClick={parse}
+          disabled={!text.trim()}
+          className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark disabled:opacity-40 disabled:cursor-not-allowed text-cream transition-colors"
+        >
+          Preview Titles
+        </button>
+      ) : (
+        <div className="mt-2 space-y-2">
+          <div className="text-xs text-fade">
+            Found <strong className="text-ink">{preview.length}</strong> titles
+            {dupCount > 0 && <span className="text-honey"> · {dupCount} look like games you already own (unticked)</span>}
+          </div>
+          <div className="max-h-52 overflow-y-auto border border-line rounded-lg divide-y divide-line/60 bg-cream">
+            {preview.map((row, i) => (
+              <label key={i} className="flex items-center gap-2.5 px-3 py-1.5 text-sm cursor-pointer hover:bg-card">
+                <input type="checkbox" checked={row.checked} onChange={() => toggleRow(i)} className="accent-[#7a5230] w-4 h-4 shrink-0" />
+                <span className="text-ink truncate">{row.title}</span>
+                {row.dup && (
+                  <span className="ml-auto text-[10px] font-semibold text-honey bg-honey/10 border border-honey/30 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                    owned on {row.dup.platform}
+                  </span>
+                )}
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setPreview(null)} className="px-3 py-2 rounded-lg text-sm font-semibold text-fade hover:bg-line/50 hover:text-ink transition-colors">
+              Back
+            </button>
+            <button
+              onClick={doImport}
+              disabled={checkedCount === 0}
+              className="px-4 py-2 rounded-lg text-sm font-semibold bg-wood hover:bg-wood-dark disabled:opacity-40 disabled:cursor-not-allowed text-cream transition-colors"
+            >
+              Import {checkedCount} Game{checkedCount === 1 ? "" : "s"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onClose, onImportParsed, onSteamImport, toast }) {
   const fileRef = useRef(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [steamOpen, setSteamOpen] = useState(false);
   const [steamText, setSteamText] = useState("");
   const [steamResult, setSteamResult] = useState(null);
@@ -676,12 +830,18 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
             <div className="font-semibold text-ink text-sm">Import JSON</div>
             <div className="text-xs text-fade mt-0.5">Restore a previous export</div>
           </button>
-          <button onClick={() => setSteamOpen((v) => !v)} className={btn}>
+          <button onClick={() => { setSteamOpen((v) => !v); setBulkOpen(false); }} className={btn}>
             <div className="font-semibold text-ink text-sm">Import from Steam</div>
             <div className="text-xs text-fade mt-0.5">Paste GetOwnedGames JSON</div>
           </button>
+          <button onClick={() => { setBulkOpen((v) => !v); setSteamOpen(false); }} className={`${btn} sm:col-span-2 ${bulkOpen ? "border-wood/60" : ""}`}>
+            <div className="font-semibold text-ink text-sm">Bulk Paste Import — PlayStation / Epic / GOG / Nintendo / Prime</div>
+            <div className="text-xs text-fade mt-0.5">Copy your library page from the store website, paste it here, done</div>
+          </button>
         </div>
         <input ref={fileRef} type="file" accept=".json,application/json" onChange={handleFile} className="hidden" />
+
+        {bulkOpen && <BulkPastePanel games={games} onImport={onImportParsed} toast={toast} />}
 
         {steamOpen && (
           <div className="mt-4 anim-rise">
@@ -715,7 +875,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
         )}
 
         <p className="mt-5 text-xs text-faint leading-relaxed">
-          PlayStation, Epic, GOG, Prime and Nintendo have no public library APIs — add those games manually.
+          PlayStation, Epic, GOG, Prime and Nintendo have no public library APIs — use Bulk Paste Import above to bring them in from their account pages.
         </p>
 
         <div className="mt-4 flex justify-end">
