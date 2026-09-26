@@ -71,6 +71,17 @@ function parseContent(gist) {
   }
 }
 
+// True when the cloud copy is the one this device last pushed or pulled, yet
+// the local library differs from it: the local edits were never pushed (app
+// closed within the push debounce, or offline) and must not be overwritten.
+export function hasUnpushedLocalChanges(remote, games, subs) {
+  if (!remote?.exportedAt || remote.exportedAt !== getSeen()) return false;
+  return (
+    JSON.stringify(games) !== JSON.stringify(remote.games) ||
+    JSON.stringify(subs) !== JSON.stringify(remote.subscriptions ?? [])
+  );
+}
+
 export async function pull() {
   const gistId = getGistId();
   if (!gistId) throw new Error("No gist configured");
@@ -85,11 +96,11 @@ export async function push(games, subs, { force = false } = {}) {
   if (!gistId) throw new Error("No gist configured");
   if (!force) {
     // Safety check: refuse to overwrite a cloud copy this device has never seen
-    // (i.e. another device pushed since our last pull/push).
+    // (another device pushed since our last pull/push, or this device has not
+    // pulled at all yet, e.g. a pull failed right after connecting).
     const gist = await gh(`/gists/${gistId}`);
     const remote = parseContent(gist);
-    const seen = getSeen();
-    if (remote?.exportedAt && seen && remote.exportedAt !== seen) {
+    if (remote?.exportedAt && remote.exportedAt !== getSeen()) {
       return { conflict: true, remote };
     }
   }

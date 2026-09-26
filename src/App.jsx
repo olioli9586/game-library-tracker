@@ -305,24 +305,27 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConf
   const handleConnect = async () => {
     if (!token.trim()) { toast("Paste a token first.", "error"); return; }
     setBusy(true);
+    let saved = false;
     try {
       await sync.validateToken(token.trim());
       let id = gistId.trim();
       if (!id) {
         id = await sync.createGist(token.trim(), games, subs);
         toast("New private gist created — your library is now in the cloud.", "success");
-      } else {
-        toast("Connected to existing gist.", "success");
       }
       sync.saveCreds(token.trim(), id);
-      setToken(""); setGistId(""); setSetupOpen(false);
-      setSyncState({ state: "ok", at: new Date().toISOString() });
-      // If a gist ID was provided, pull from it
+      saved = true;
+      // If a gist ID was provided, pull from it before this device may push to it
       if (gistId.trim()) {
         const { data } = await sync.pull();
         if (data) onPulled(data);
+        toast("Connected to existing gist.", "success");
       }
+      setToken(""); setGistId(""); setSetupOpen(false);
+      setSyncState({ state: "ok", at: new Date().toISOString() });
     } catch (e) {
+      // Don't stay half-connected to a gist we never read: the next auto-push would overwrite it
+      if (saved) sync.clearCreds();
       toast(`Connect failed: ${e.message}`, "error");
     } finally { setBusy(false); }
   };
@@ -348,7 +351,11 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConf
     setBusy(true); setSyncState({ state: "syncing" });
     try {
       const { data } = await sync.pull();
-      if (!data) { toast("Cloud gist is empty or unreadable.", "error"); return; }
+      if (!data) {
+        setSyncState({ state: "error", message: "cloud copy is empty or unreadable" });
+        toast("Cloud gist is empty or unreadable.", "error");
+        return;
+      }
       onPulled(data);
       sync.setLastSync(new Date().toISOString());
       setSyncState({ state: "ok", at: new Date().toISOString() });
@@ -1458,18 +1465,25 @@ export default function App() {
     setSyncState((s) => ({ ...s, state: "syncing" }));
     sync.pull()
       .then(({ data }) => {
-        if (data?.games?.length >= 0) {
-          applyingRemoteRef.current = true;
-          setGames(data.games);
-          setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
-          sync.setLastSync(new Date().toISOString());
-          setSyncState({ state: "ok", at: new Date().toISOString() });
+        if (!data) {
+          setSyncState({ state: "error", message: "cloud copy is empty or unreadable" });
+          return;
         }
+        // Cloud unchanged since our last sync but local differs: keep the local
+        // edits and let the pending auto-push upload them.
+        if (sync.hasUnpushedLocalChanges(data, games, subs)) return;
+        applyingRemoteRef.current = true;
+        setGames(data.games);
+        setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
+        sync.setLastSync(new Date().toISOString());
+        setSyncState({ state: "ok", at: new Date().toISOString() });
       })
       .catch((e) => {
         setSyncState({ state: "error", message: e.message });
         toast(`Cloud pull failed: ${e.message}`, "error");
       });
+    // Guarded to run once; `subs` is intentionally the value from the first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games, toast]);
 
   // Debounced auto-push when games/subs change

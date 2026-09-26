@@ -109,6 +109,22 @@ describe("push", () => {
     expect(cloud.games).toHaveLength(2);
   });
 
+  it("refuses to overwrite a cloud copy this device has never pulled", async () => {
+    // e.g. connected to an existing gist but the first pull failed
+    sync.saveCreds("tok", "gist123");
+    cloud = { schema: 1, exportedAt: "2026-09-02T00:00:00.000Z", games: [game], subscriptions: [] };
+    const res = await sync.push([], []);
+    expect(res.conflict).toBe(true);
+    expect(cloud.games).toEqual([game]);
+  });
+
+  it("pushes into a gist that has no library file yet", async () => {
+    sync.saveCreds("tok", "gist123");
+    const res = await sync.push([game], []);
+    expect(res.conflict).toBe(false);
+    expect(cloud.games).toEqual([game]);
+  });
+
   it("overwrites when forced", async () => {
     sync.saveCreds("tok", "gist123");
     sync.setSeen("2026-09-01T00:00:00.000Z");
@@ -116,6 +132,31 @@ describe("push", () => {
     const res = await sync.push([], [], { force: true });
     expect(res.conflict).toBe(false);
     expect(cloud.games).toEqual([]);
+  });
+});
+
+describe("hasUnpushedLocalChanges", () => {
+  const remote = { schema: 1, exportedAt: "2026-09-01T00:00:00.000Z", games: [game], subscriptions: [] };
+
+  it("is false when local matches the cloud copy", () => {
+    sync.setSeen(remote.exportedAt);
+    expect(sync.hasUnpushedLocalChanges(remote, [game], [])).toBe(false);
+  });
+
+  it("is true when local was edited after the last sync and the cloud has not moved", () => {
+    sync.setSeen(remote.exportedAt);
+    expect(sync.hasUnpushedLocalChanges(remote, [game, { ...game, id: "g2" }], [])).toBe(true);
+    expect(sync.hasUnpushedLocalChanges(remote, [game], [{ id: "s1", name: "PS Plus", endDate: "2026-12-01", notes: "" }])).toBe(true);
+  });
+
+  it("is false when another device pushed since, so the cloud copy wins", () => {
+    sync.setSeen("2026-08-01T00:00:00.000Z");
+    expect(sync.hasUnpushedLocalChanges(remote, [], [])).toBe(false);
+  });
+
+  it("is false when this device has no sync history", () => {
+    expect(sync.hasUnpushedLocalChanges(remote, [], [])).toBe(false);
+    expect(sync.hasUnpushedLocalChanges({ games: [] }, [game], [])).toBe(false);
   });
 });
 
