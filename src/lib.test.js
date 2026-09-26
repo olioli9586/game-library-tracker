@@ -1,0 +1,166 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  addMonths,
+  csvEscape,
+  daysBetween,
+  fuzzyMatch,
+  isSubDependent,
+  parsePastedTitles,
+  sanitizeGame,
+  sanitizeSub,
+  sourcesForPlatform,
+} from "./lib.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("fuzzyMatch", () => {
+  it("ignores case, spaces and punctuation", () => {
+    expect(fuzzyMatch("The Legend of Zelda: Tears of the Kingdom", "zelda tears")).toBe(true);
+    expect(fuzzyMatch("The Legend of Zelda: Tears of the Kingdom", "zelda kingdom")).toBe(false);
+    expect(fuzzyMatch("The Legend of Zelda: Tears of the Kingdom", "tears of the kingdom")).toBe(true);
+    expect(fuzzyMatch("Hollow Knight", "hollow-knight")).toBe(true);
+  });
+
+  it("matches in either direction", () => {
+    expect(fuzzyMatch("Control", "Control Ultimate Edition")).toBe(true);
+    expect(fuzzyMatch("Control Ultimate Edition", "Control")).toBe(true);
+  });
+
+  it("matches Chinese titles", () => {
+    expect(fuzzyMatch("薩爾達傳說 王國之淚", "王國之淚")).toBe(true);
+  });
+
+  it("never matches empty input", () => {
+    expect(fuzzyMatch("", "")).toBe(false);
+    expect(fuzzyMatch("Hades", "")).toBe(false);
+    expect(fuzzyMatch(undefined, "Hades")).toBe(false);
+  });
+});
+
+describe("sourcesForPlatform", () => {
+  it("offers PS Plus sources only on PlayStation", () => {
+    expect(sourcesForPlatform("PS5")).toContain("ps_plus_catalog");
+    expect(sourcesForPlatform("Steam")).not.toContain("ps_plus_catalog");
+  });
+
+  it("keeps the current source available when editing", () => {
+    const list = sourcesForPlatform("Steam", "ps_plus_monthly");
+    expect(list[0]).toBe("ps_plus_monthly");
+    expect(list).toContain("purchased");
+  });
+});
+
+describe("parsePastedTitles", () => {
+  it("drops prices, dates, labels and duplicates from a pasted store page", () => {
+    const text = [
+      "Your Library",
+      "• God of War Ragnarok",
+      "PS5",
+      "NT$ 1,790",
+      "2024/03/01",
+      "Purchased",
+      "Stellar Blade",
+      "god of war ragnarok",
+      "x",
+      "  - Astro Bot |",
+    ].join("\r\n");
+    expect(parsePastedTitles(text)).toEqual(["God of War Ragnarok", "Stellar Blade", "Astro Bot"]);
+  });
+});
+
+describe("csvEscape", () => {
+  it("leaves plain values untouched and blanks missing ones", () => {
+    expect(csvEscape("Hades")).toBe("Hades");
+    expect(csvEscape(9)).toBe("9");
+    expect(csvEscape(undefined)).toBe("");
+    expect(csvEscape(null)).toBe("");
+  });
+
+  it("quotes commas, quotes and newlines", () => {
+    expect(csvEscape("Hello, World")).toBe('"Hello, World"');
+    expect(csvEscape('Say "hi"')).toBe('"Say ""hi"""');
+    expect(csvEscape("a\nb")).toBe('"a\nb"');
+  });
+});
+
+describe("daysBetween", () => {
+  it("counts whole days left until the end of the end date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 25, 10, 0, 0));
+    expect(daysBetween("2026-09-25")).toBe(0);
+    expect(daysBetween("2026-09-26")).toBe(1);
+    expect(daysBetween("2026-10-25")).toBe(30);
+    expect(daysBetween("2026-09-24")).toBe(-1);
+  });
+});
+
+describe("addMonths", () => {
+  it("extends a future end date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 25, 10, 0, 0));
+    expect(addMonths("2026-10-15", 1)).toBe("2026-11-15");
+    expect(addMonths("2026-10-15", 12)).toBe("2027-10-15");
+  });
+
+  it("returns the input unchanged when it is not a date", () => {
+    expect(addMonths("not-a-date", 1)).toBe("not-a-date");
+  });
+});
+
+describe("sanitizeGame", () => {
+  const valid = { id: "g1", title: "Hades", platform: "Steam", source: "purchased", status: "backlog", dateAdded: "2024-01-01" };
+
+  it("keeps a valid game", () => {
+    expect(sanitizeGame(valid)).toEqual(valid);
+  });
+
+  it("rejects unknown platform, source or status", () => {
+    expect(sanitizeGame({ ...valid, platform: "Xbox" })).toBeNull();
+    expect(sanitizeGame({ ...valid, source: "stolen" })).toBeNull();
+    expect(sanitizeGame({ ...valid, status: "meh" })).toBeNull();
+    expect(sanitizeGame(null)).toBeNull();
+    expect(sanitizeGame({ ...valid, title: "" })).toBeNull();
+  });
+
+  it("drops out-of-range optional fields", () => {
+    const g = sanitizeGame({ ...valid, rating: 11, hoursPlayed: -1, notes: 5 });
+    expect(g).not.toHaveProperty("rating");
+    expect(g).not.toHaveProperty("hoursPlayed");
+    expect(g).not.toHaveProperty("notes");
+  });
+
+  it("only keeps leavingSoon on subscription-dependent games", () => {
+    expect(sanitizeGame({ ...valid, leavingSoon: true })).not.toHaveProperty("leavingSoon");
+    expect(sanitizeGame({ ...valid, platform: "PS5", source: "ps_plus_catalog", leavingSoon: true }).leavingSoon).toBe(true);
+  });
+
+  it("assigns an id when missing", () => {
+    const { id, ...noId } = valid;
+    expect(typeof sanitizeGame(noId).id).toBe("string");
+  });
+});
+
+describe("sanitizeSub", () => {
+  it("requires a name and end date", () => {
+    expect(sanitizeSub({ name: "PS Plus" })).toBeNull();
+    expect(sanitizeSub({ endDate: "2026-01-01" })).toBeNull();
+  });
+
+  it("normalises fields", () => {
+    expect(sanitizeSub({ id: "s1", name: "PS Plus", endDate: "2026-01-01T00:00:00Z", notes: 3 })).toEqual({
+      id: "s1",
+      name: "PS Plus",
+      endDate: "2026-01-01",
+      notes: "",
+    });
+  });
+});
+
+describe("isSubDependent", () => {
+  it("flags subscription sources only", () => {
+    expect(isSubDependent({ source: "game_pass" })).toBe(true);
+    expect(isSubDependent({ source: "prime_gaming" })).toBe(false);
+  });
+});
