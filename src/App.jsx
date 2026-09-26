@@ -3,7 +3,7 @@ import * as sync from "./sync.js";
 import {
   PLATFORMS, SOURCES, STATUSES, SUB_SOURCES, isSubDependent, todayISO, fuzzyMatch, matchesQuery,
   sourcesForPlatform, parsePastedTitles, gamesToCSV, daysBetween, addMonths, sanitizeSub, sanitizeGame,
-  planSteamImport,
+  planSteamImport, shortcutAction,
 } from "./lib.js";
 
 /* ------------------------------------------------------------------ */
@@ -1541,19 +1541,16 @@ export default function App() {
   /* ---- keyboard shortcuts ---- */
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") {
+      const action = shortcutAction(e);
+      if (action === "close") {
         setModal(null);
-        return;
-      }
-      const tag = e.target.tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-      if (typing) return;
-      if (e.key === "/") {
+      } else if (action === "search") {
         e.preventDefault();
         searchRef.current?.focus();
-      } else if (e.key === "n" || e.key === "N") {
+      } else if (action === "add") {
         e.preventDefault();
-        setModal({ type: "add" });
+        // Don't throw away a dialog that is already open (e.g. a sync conflict)
+        setModal((m) => m ?? { type: "add" });
       }
     };
     window.addEventListener("keydown", onKey);

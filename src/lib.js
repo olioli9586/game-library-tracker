@@ -197,3 +197,16 @@ export function planSteamImport(list, games) {
   }
   return { added, skipped };
 }
+
+// Global keyboard shortcuts: Esc closes, "/" focuses search, N adds a game.
+// Browser/OS combos (Ctrl/Cmd/Alt+N = new window) and typing in fields are left alone.
+export function shortcutAction(e) {
+  if (e.key === "Escape") return "close";
+  if (e.metaKey || e.ctrlKey || e.altKey) return null;
+  const t = e.target;
+  const tag = t?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return null;
+  if (e.key === "/") return "search";
+  if (e.key === "n" || e.key === "N") return "add";
+  return null;
+}

@@ -10,6 +10,7 @@ import {
   matchesQuery,
   parsePastedTitles,
   planSteamImport,
+  shortcutAction,
   sanitizeGame,
   sanitizeSub,
   sourcesForPlatform,
@@ -283,5 +284,32 @@ describe("planSteamImport", () => {
     expect(added.map((g) => g.title)).toEqual(["Celeste"]);
     expect(skipped).toBe(1);
     expect(added[0]).not.toHaveProperty("hoursPlayed");
+  });
+});
+
+describe("shortcutAction", () => {
+  const body = { tagName: "BODY" };
+  const key = (k, extra = {}) => ({ key: k, target: body, ...extra });
+
+  it("maps the documented shortcuts", () => {
+    expect(shortcutAction(key("n"))).toBe("add");
+    expect(shortcutAction(key("N", { shiftKey: true }))).toBe("add");
+    expect(shortcutAction(key("/"))).toBe("search");
+    expect(shortcutAction(key("Escape"))).toBe("close");
+    expect(shortcutAction(key("x"))).toBeNull();
+  });
+
+  it("leaves browser shortcuts like Ctrl/Cmd+N alone", () => {
+    expect(shortcutAction(key("n", { ctrlKey: true }))).toBeNull();
+    expect(shortcutAction(key("n", { metaKey: true }))).toBeNull();
+    expect(shortcutAction(key("/", { altKey: true }))).toBeNull();
+  });
+
+  it("ignores keys typed into form fields, but Esc still closes", () => {
+    for (const tagName of ["INPUT", "TEXTAREA", "SELECT"]) {
+      expect(shortcutAction({ key: "n", target: { tagName } })).toBeNull();
+    }
+    expect(shortcutAction({ key: "n", target: { tagName: "DIV", isContentEditable: true } })).toBeNull();
+    expect(shortcutAction({ key: "Escape", target: { tagName: "INPUT" } })).toBe("close");
   });
 });
