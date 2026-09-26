@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   addMonths,
+  todayISO,
   csvEscape,
   daysBetween,
   fuzzyMatch,
@@ -104,8 +105,48 @@ describe("addMonths", () => {
     expect(addMonths("2026-10-15", 12)).toBe("2027-10-15");
   });
 
+  it("clamps month-end dates instead of rolling into the next month", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 10, 10, 0, 0));
+    expect(addMonths("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addMonths("2026-03-31", 1)).toBe("2026-04-30");
+    expect(addMonths("2027-12-31", 2)).toBe("2028-02-29");
+    expect(addMonths("2026-08-31", 12)).toBe("2027-08-31");
+  });
+
+  it("renews a lapsed subscription from today", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 25, 10, 0, 0));
+    expect(addMonths("2026-01-01", 1)).toBe("2026-10-25");
+    expect(addMonths("2026-09-25", 1)).toBe("2026-10-25");
+  });
+
   it("returns the input unchanged when it is not a date", () => {
     expect(addMonths("not-a-date", 1)).toBe("not-a-date");
+  });
+});
+
+describe("local dates east of UTC", () => {
+  const originalTZ = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = "Asia/Taipei";
+  });
+  afterAll(() => {
+    if (originalTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTZ;
+  });
+
+  it("todayISO uses the local calendar day, not the UTC one", () => {
+    vi.useFakeTimers();
+    // 07:30 in Taipei is still the previous day in UTC
+    vi.setSystemTime(new Date("2026-09-24T23:30:00Z"));
+    expect(todayISO()).toBe("2026-09-25");
+  });
+
+  it("addMonths from today keeps the local day", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-24T23:30:00Z"));
+    expect(addMonths("2026-01-01", 1)).toBe("2026-10-25");
   });
 });
 

@@ -27,7 +27,11 @@ export const STATUSES = {
 export const SUB_SOURCES = ["ps_plus_monthly", "ps_plus_catalog", "prime_gaming_catalog", "nintendo_online", "game_pass"];
 export const isSubDependent = (g) => SUB_SOURCES.includes(g.source);
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+// Local calendar date as YYYY-MM-DD. toISOString() would give the UTC date,
+// which is a day behind for the morning hours east of UTC (e.g. UTC+8).
+export const localISO = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+export const todayISO = () => localISO(new Date());
 export const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9一-鿿]/g, "");
 export const fuzzyMatch = (a, b) => {
   const na = norm(a);
@@ -97,13 +101,18 @@ export function daysBetween(endISO) {
   return Math.floor((end - now) / (1000 * 60 * 60 * 24));
 }
 
+// Extend an end date by N months, starting from today if it already lapsed.
+// Month-end dates clamp (Jan 31 + 1 month = Feb 28/29) instead of rolling over.
 export function addMonths(isoDate, months) {
   const base = new Date(isoDate + "T12:00:00");
   if (Number.isNaN(base.getTime())) return isoDate;
-  const start = base < new Date() ? new Date() : base;
-  const next = new Date(start);
-  next.setMonth(next.getMonth() + months);
-  return next.toISOString().slice(0, 10);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const start = base < today ? today : base;
+  const y = start.getFullYear();
+  const m = start.getMonth() + months;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return localISO(new Date(y, m, Math.min(start.getDate(), lastDay), 12));
 }
 
 export function sanitizeSub(raw) {
