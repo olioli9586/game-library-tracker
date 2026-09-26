@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as sync from "./sync.js";
+import {
+  PLATFORMS, SOURCES, STATUSES, SUB_SOURCES, isSubDependent, todayISO, fuzzyMatch, matchesQuery,
+  sourcesForPlatform, parsePastedTitles, gamesToCSV, daysBetween, addMonths, sanitizeSub, sanitizeGame,
+  planSteamImport, shortcutAction,
+} from "./lib.js";
 
 /* ------------------------------------------------------------------ */
 /* Constants & helpers                                                  */
@@ -7,8 +12,6 @@ import * as sync from "./sync.js";
 
 const STORAGE_KEY = "game_library_v2";
 const SUBS_KEY = "game_subscriptions_v1";
-
-const PLATFORMS = ["NS1", "NS2", "PS4", "PS5", "Steam", "Epic", "GOG", "Prime"];
 
 const PLATFORM_COLORS = {
   NS1: "#E60012",
@@ -20,70 +23,6 @@ const PLATFORM_COLORS = {
   GOG: "#5C2D8F",
   Prime: "#cc7a00",
 };
-
-const SOURCES = {
-  purchased: { label: "Purchased", permanent: true },
-  physical: { label: "Physical", permanent: true },
-  free: { label: "Free / Giveaway", permanent: true },
-  epic_free: { label: "Epic Free", permanent: true },
-  prime_gaming: { label: "Prime Gaming (Claimed)", permanent: true },
-  ps_plus_monthly: { label: "PS Plus Monthly", permanent: false },
-  ps_plus_catalog: { label: "PS Plus Catalog", permanent: false },
-  prime_gaming_catalog: { label: "Prime Collection", permanent: false },
-  nintendo_online: { label: "Nintendo Online", permanent: false },
-  game_pass: { label: "Game Pass", permanent: false },
-};
-
-const STATUSES = {
-  wishlist: { label: "Wishlist", cls: "bg-dusk/10 text-dusk border-dusk/30" },
-  backlog: { label: "Backlog", cls: "bg-fade/10 text-fade border-fade/30" },
-  playing: { label: "Playing", cls: "bg-pine/10 text-pine border-pine/30" },
-  completed: { label: "Completed", cls: "bg-sage/10 text-sage border-sage/30" },
-  dropped: { label: "Dropped", cls: "bg-clay/10 text-clay border-clay/30" },
-  on_hold: { label: "On Hold", cls: "bg-honey/10 text-honey border-honey/30" },
-};
-
-const SUB_SOURCES = ["ps_plus_monthly", "ps_plus_catalog", "prime_gaming_catalog", "nintendo_online", "game_pass"];
-const isSubDependent = (g) => SUB_SOURCES.includes(g.source);
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9一-鿿]/g, "");
-const fuzzyMatch = (a, b) => {
-  const na = norm(a);
-  const nb = norm(b);
-  if (!na || !nb) return false;
-  return na.includes(nb) || nb.includes(na);
-};
-
-function sourcesForPlatform(platform, current) {
-  let list;
-  switch (platform) {
-    case "NS1":
-    case "NS2":
-      list = ["purchased", "physical", "free", "nintendo_online"];
-      break;
-    case "PS4":
-    case "PS5":
-      list = ["purchased", "physical", "free", "ps_plus_monthly", "ps_plus_catalog"];
-      break;
-    case "Steam":
-      list = ["purchased", "free", "prime_gaming", "game_pass"];
-      break;
-    case "Epic":
-      list = ["purchased", "epic_free", "free", "prime_gaming"];
-      break;
-    case "GOG":
-      list = ["purchased", "free", "prime_gaming"];
-      break;
-    case "Prime":
-      list = ["prime_gaming", "prime_gaming_catalog", "free"];
-      break;
-    default:
-      list = Object.keys(SOURCES);
-  }
-  if (current && !list.includes(current)) list = [current, ...list];
-  return list;
-}
 
 const SAMPLE_DATA = [
   { id: "a1b2c3d4-0001", title: "The Legend of Zelda: Tears of the Kingdom", platform: "NS1", source: "purchased", status: "completed", rating: 10, hoursPlayed: 87, notes: "", dateAdded: "2023-05-12", completedDate: "2023-08-01" },
@@ -108,79 +47,9 @@ function downloadFile(filename, content, mime) {
   URL.revokeObjectURL(url);
 }
 
-function parsePastedTitles(text) {
-  const out = [];
-  const seen = new Set();
-  for (const raw of text.split(/\r?\n/)) {
-    let s = raw.replace(/^[\s•·\-–—*>]+/, "").replace(/[\s|]+$/, "").trim();
-    if (s.length < 2) continue;
-    // Skip lines that are just prices, numbers, or dates (store pages are full of them)
-    if (/^(NT\$|HK\$|US\$|\$|¥|€|£|USD|TWD|HKD)?\s*[\d,.]+\s*(元|USD|TWD|HKD)?$/i.test(s)) continue;
-    if (/^\d{4}[/.\-年]\s?\d{1,2}[/.\-月]\s?\d{1,2}\s?日?$/.test(s)) continue;
-    if (/^(free|included|purchased|owned|installed|download|已購買|已擁有|免費)$/i.test(s)) continue;
-    if (/^(PS3|PS4|PS5|PS VR2?|PC|Mac|Nintendo Switch( 2)?|Full game|Game|Add-on|Bundle|Demo|Your Library|Library|Sort by|Filter)$/i.test(s)) continue;
-    const key = s.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(s);
-  }
-  return out;
-}
-
-const csvEscape = (v) => {
-  if (v === undefined || v === null) return "";
-  const s = String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-
-function daysBetween(endISO) {
-  const end = new Date(endISO + "T23:59:59");
-  const now = new Date();
-  return Math.floor((end - now) / (1000 * 60 * 60 * 24));
-}
-
-function addMonths(isoDate, months) {
-  const base = new Date(isoDate + "T12:00:00");
-  if (Number.isNaN(base.getTime())) return isoDate;
-  const start = base < new Date() ? new Date() : base;
-  const next = new Date(start);
-  next.setMonth(next.getMonth() + months);
-  return next.toISOString().slice(0, 10);
-}
-
 const SAMPLE_SUBS = [
   { id: "sub-sample-1", name: "PS Plus Extra", endDate: new Date(Date.now() + 42 * 86400000).toISOString().slice(0, 10), notes: "" },
 ];
-
-function sanitizeSub(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  if (!raw.name || !raw.endDate) return null;
-  return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(),
-    name: String(raw.name),
-    endDate: String(raw.endDate).slice(0, 10),
-    notes: typeof raw.notes === "string" ? raw.notes : "",
-  };
-}
-
-function sanitizeGame(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  if (!raw.title || !PLATFORMS.includes(raw.platform) || !SOURCES[raw.source] || !STATUSES[raw.status]) return null;
-  const g = {
-    id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(),
-    title: String(raw.title),
-    platform: raw.platform,
-    source: raw.source,
-    status: raw.status,
-    dateAdded: typeof raw.dateAdded === "string" && raw.dateAdded ? raw.dateAdded : todayISO(),
-  };
-  if (typeof raw.rating === "number" && raw.rating >= 1 && raw.rating <= 10) g.rating = raw.rating;
-  if (typeof raw.hoursPlayed === "number" && raw.hoursPlayed >= 0) g.hoursPlayed = raw.hoursPlayed;
-  if (typeof raw.notes === "string" && raw.notes) g.notes = raw.notes;
-  if (typeof raw.completedDate === "string" && raw.completedDate) g.completedDate = raw.completedDate;
-  if (raw.leavingSoon === true && isSubDependent(g)) g.leavingSoon = true;
-  return g;
-}
 
 /* ------------------------------------------------------------------ */
 /* Small presentational pieces                                          */
@@ -222,7 +91,8 @@ function SourceBadge({ source, leavingSoon }) {
 }
 
 function StatusBadge({ status }) {
-  const meta = STATUSES[status];
+  // Unknown values can arrive from a hand-edited gist; render them rather than crash
+  const meta = STATUSES[status] ?? { label: String(status ?? "—"), cls: STATUSES.backlog.cls };
   return (
     <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${meta.cls}`}>
       {meta.label}
@@ -353,7 +223,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
               <div className="mt-2 text-xs text-honey bg-honey/10 border border-honey/30 rounded-lg px-3 py-2 space-y-0.5">
                 {duplicates.slice(0, 3).map((d) => (
                   <div key={d.id}>
-                    Possible duplicate: <strong>{d.title}</strong> on {d.platform} ({SOURCES[d.source].label})
+                    Possible duplicate: <strong>{d.title}</strong> on {d.platform} ({SOURCES[d.source]?.label ?? d.source})
                   </div>
                 ))}
               </div>
@@ -373,7 +243,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
               <label className={label}>Source *</label>
               <select value={source} onChange={(e) => setSource(e.target.value)} className={field}>
                 {sourceOptions.map((s) => (
-                  <option key={s} value={s}>{SOURCES[s].label}</option>
+                  <option key={s} value={s}>{SOURCES[s]?.label ?? s}</option>
                 ))}
               </select>
             </div>
@@ -436,24 +306,27 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConf
   const handleConnect = async () => {
     if (!token.trim()) { toast("Paste a token first.", "error"); return; }
     setBusy(true);
+    let saved = false;
     try {
       await sync.validateToken(token.trim());
       let id = gistId.trim();
       if (!id) {
         id = await sync.createGist(token.trim(), games, subs);
         toast("New private gist created — your library is now in the cloud.", "success");
-      } else {
-        toast("Connected to existing gist.", "success");
       }
       sync.saveCreds(token.trim(), id);
-      setToken(""); setGistId(""); setSetupOpen(false);
-      setSyncState({ state: "ok", at: new Date().toISOString() });
-      // If a gist ID was provided, pull from it
+      saved = true;
+      // If a gist ID was provided, pull from it before this device may push to it
       if (gistId.trim()) {
         const { data } = await sync.pull();
         if (data) onPulled(data);
+        toast("Connected to existing gist.", "success");
       }
+      setToken(""); setGistId(""); setSetupOpen(false);
+      setSyncState({ state: "ok", at: new Date().toISOString() });
     } catch (e) {
+      // Don't stay half-connected to a gist we never read: the next auto-push would overwrite it
+      if (saved) sync.clearCreds();
       toast(`Connect failed: ${e.message}`, "error");
     } finally { setBusy(false); }
   };
@@ -479,7 +352,11 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConf
     setBusy(true); setSyncState({ state: "syncing" });
     try {
       const { data } = await sync.pull();
-      if (!data) { toast("Cloud gist is empty or unreadable.", "error"); return; }
+      if (!data) {
+        setSyncState({ state: "error", message: "cloud copy is empty or unreadable" });
+        toast("Cloud gist is empty or unreadable.", "error");
+        return;
+      }
       onPulled(data);
       sync.setLastSync(new Date().toISOString());
       setSyncState({ state: "ok", at: new Date().toISOString() });
@@ -767,10 +644,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
   };
 
   const exportCSV = () => {
-    const cols = ["id", "title", "platform", "source", "status", "rating", "hoursPlayed", "notes", "dateAdded", "completedDate", "leavingSoon"];
-    const rows = [cols.join(",")];
-    for (const g of games) rows.push(cols.map((c) => csvEscape(g[c])).join(","));
-    downloadFile(`game_library_${todayISO()}.csv`, rows.join("\n"), "text/csv");
+    downloadFile(`game_library_${todayISO()}.csv`, gamesToCSV(games), "text/csv;charset=utf-8");
   };
 
   const handleFile = async (e) => {
@@ -874,7 +748,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
             </button>
             {steamResult && (
               <p className="mt-2 text-sm text-sage">
-                {steamResult.added} games added, {steamResult.skipped} skipped (already in library).
+                {steamResult.added} games added, {steamResult.skipped} skipped (already tracked on Steam).
               </p>
             )}
           </div>
@@ -1591,19 +1465,30 @@ export default function App() {
     if (!sync.isConfigured()) return;
     setSyncState((s) => ({ ...s, state: "syncing" }));
     sync.pull()
-      .then(({ data }) => {
-        if (data?.games?.length >= 0) {
-          applyingRemoteRef.current = true;
-          setGames(data.games);
-          setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
-          sync.setLastSync(new Date().toISOString());
-          setSyncState({ state: "ok", at: new Date().toISOString() });
+      .then(({ data, seenBefore }) => {
+        if (!data) {
+          setSyncState({ state: "error", message: "cloud copy is empty or unreadable" });
+          return;
         }
+        // Cloud unchanged since our last sync but local differs: keep the local
+        // edits and let the pending auto-push upload them.
+        if (sync.hasUnpushedLocalChanges(data, games, subs, seenBefore)) {
+          // Don't hide an error from a push that already ran
+          setSyncState((s) => (s.state === "syncing" ? { state: "ok", at: sync.getLastSync() } : s));
+          return;
+        }
+        applyingRemoteRef.current = true;
+        setGames(data.games);
+        setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
+        sync.setLastSync(new Date().toISOString());
+        setSyncState({ state: "ok", at: new Date().toISOString() });
       })
       .catch((e) => {
         setSyncState({ state: "error", message: e.message });
         toast(`Cloud pull failed: ${e.message}`, "error");
       });
+    // Guarded to run once; `subs` is intentionally the value from the first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games, toast]);
 
   // Debounced auto-push when games/subs change
@@ -1661,19 +1546,16 @@ export default function App() {
   /* ---- keyboard shortcuts ---- */
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") {
+      const action = shortcutAction(e);
+      if (action === "close") {
         setModal(null);
-        return;
-      }
-      const tag = e.target.tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-      if (typing) return;
-      if (e.key === "/") {
+      } else if (action === "search") {
         e.preventDefault();
         searchRef.current?.focus();
-      } else if (e.key === "n" || e.key === "N") {
+      } else if (action === "add") {
         e.preventDefault();
-        setModal({ type: "add" });
+        // Don't throw away a dialog that is already open (e.g. a sync conflict)
+        setModal((m) => m ?? { type: "add" });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -1783,29 +1665,7 @@ export default function App() {
   };
 
   const handleSteamImport = (list) => {
-    const existing = new Set(games.map((g) => g.title.toLowerCase()));
-    const added = [];
-    let skipped = 0;
-    for (const item of list) {
-      const name = item?.name;
-      if (!name) continue;
-      if (existing.has(name.toLowerCase())) {
-        skipped++;
-        continue;
-      }
-      const g = {
-        id: crypto.randomUUID(),
-        title: name,
-        platform: "Steam",
-        source: "purchased",
-        status: "backlog",
-        dateAdded: todayISO(),
-      };
-      const mins = item.playtime_forever;
-      if (typeof mins === "number" && mins > 0) g.hoursPlayed = Math.round((mins / 60) * 10) / 10;
-      existing.add(name.toLowerCase());
-      added.push(g);
-    }
+    const { added, skipped } = planSteamImport(list, games);
     if (added.length > 0) setGames((gs) => [...gs, ...added]);
     toast(`Steam import: ${added.length} added, ${skipped} skipped.`, "success");
     return { added: added.length, skipped };
@@ -1815,7 +1675,7 @@ export default function App() {
   const quickMatches = useMemo(() => {
     const q = query.trim();
     if (!q) return null;
-    return (games ?? []).filter((g) => fuzzyMatch(g.title, q) || (g.notes && norm(g.notes).includes(norm(q))));
+    return (games ?? []).filter((g) => matchesQuery(g, q));
   }, [query, games]);
 
   const visibleGames = useMemo(() => {
@@ -1828,7 +1688,7 @@ export default function App() {
     else if (tab === "leaving") list = list.filter((g) => g.leavingSoon === true);
 
     const q = query.trim();
-    if (q) list = list.filter((g) => fuzzyMatch(g.title, q) || (g.notes && norm(g.notes).includes(norm(q))));
+    if (q) list = list.filter((g) => matchesQuery(g, q));
 
     if (tab === "all") {
       const f = filters;

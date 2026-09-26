@@ -65,19 +65,35 @@ function parseContent(gist) {
   try {
     const data = JSON.parse(file.content);
     if (!Array.isArray(data.games)) return null;
+    // Drop entries the UI can't render (the gist can be hand-edited on GitHub)
+    data.games = data.games.filter((g) => g && typeof g === "object" && typeof g.title === "string");
+    if (!Array.isArray(data.subscriptions)) data.subscriptions = [];
     return data;
   } catch {
     return null;
   }
 }
 
+// True when the cloud copy is the one this device last pushed or pulled, yet
+// the local library differs from it: the local edits were never pushed (app
+// closed within the push debounce, or offline) and must not be overwritten.
+// `seenBefore` must be read before pulling, since pull() records what it saw.
+export function hasUnpushedLocalChanges(remote, games, subs, seenBefore) {
+  if (!remote?.exportedAt || !seenBefore || remote.exportedAt !== seenBefore) return false;
+  return (
+    JSON.stringify(games) !== JSON.stringify(remote.games) ||
+    JSON.stringify(subs) !== JSON.stringify(remote.subscriptions ?? [])
+  );
+}
+
 export async function pull() {
   const gistId = getGistId();
   if (!gistId) throw new Error("No gist configured");
+  const seenBefore = getSeen();
   const gist = await gh(`/gists/${gistId}`);
   const data = parseContent(gist);
   if (data?.exportedAt) setSeen(data.exportedAt);
-  return { data, updatedAt: gist.updated_at };
+  return { data, updatedAt: gist.updated_at, seenBefore };
 }
 
 export async function push(games, subs, { force = false } = {}) {
@@ -85,11 +101,11 @@ export async function push(games, subs, { force = false } = {}) {
   if (!gistId) throw new Error("No gist configured");
   if (!force) {
     // Safety check: refuse to overwrite a cloud copy this device has never seen
-    // (i.e. another device pushed since our last pull/push).
+    // (another device pushed since our last pull/push, or this device has not
+    // pulled at all yet, e.g. a pull failed right after connecting).
     const gist = await gh(`/gists/${gistId}`);
     const remote = parseContent(gist);
-    const seen = getSeen();
-    if (remote?.exportedAt && seen && remote.exportedAt !== seen) {
+    if (remote?.exportedAt && remote.exportedAt !== getSeen()) {
       return { conflict: true, remote };
     }
   }
