@@ -158,3 +158,33 @@ export function sanitizeGame(raw) {
   if (raw.leavingSoon === true && isSubDependent(g)) g.leavingSoon = true;
   return g;
 }
+
+// Map a Steam GetOwnedGames `games` list to new library entries. Only titles
+// already tracked on Steam are skipped: owning a game on another platform is
+// a separate copy and should still be recorded.
+export function planSteamImport(list, games) {
+  const existing = new Set(games.filter((g) => g.platform === "Steam").map((g) => g.title.toLowerCase()));
+  const added = [];
+  let skipped = 0;
+  for (const item of list) {
+    const name = typeof item?.name === "string" ? item.name.trim() : "";
+    if (!name) continue;
+    if (existing.has(name.toLowerCase())) {
+      skipped++;
+      continue;
+    }
+    const g = {
+      id: crypto.randomUUID(),
+      title: name,
+      platform: "Steam",
+      source: "purchased",
+      status: "backlog",
+      dateAdded: todayISO(),
+    };
+    const mins = item.playtime_forever;
+    if (typeof mins === "number" && mins > 0) g.hoursPlayed = Math.round((mins / 60) * 10) / 10;
+    existing.add(name.toLowerCase());
+    added.push(g);
+  }
+  return { added, skipped };
+}

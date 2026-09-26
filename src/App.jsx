@@ -3,6 +3,7 @@ import * as sync from "./sync.js";
 import {
   PLATFORMS, SOURCES, STATUSES, SUB_SOURCES, isSubDependent, todayISO, fuzzyMatch, matchesQuery,
   sourcesForPlatform, parsePastedTitles, csvEscape, daysBetween, addMonths, sanitizeSub, sanitizeGame,
+  planSteamImport,
 } from "./lib.js";
 
 /* ------------------------------------------------------------------ */
@@ -742,7 +743,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
             </button>
             {steamResult && (
               <p className="mt-2 text-sm text-sage">
-                {steamResult.added} games added, {steamResult.skipped} skipped (already in library).
+                {steamResult.added} games added, {steamResult.skipped} skipped (already tracked on Steam).
               </p>
             )}
           </div>
@@ -1651,29 +1652,7 @@ export default function App() {
   };
 
   const handleSteamImport = (list) => {
-    const existing = new Set(games.map((g) => g.title.toLowerCase()));
-    const added = [];
-    let skipped = 0;
-    for (const item of list) {
-      const name = item?.name;
-      if (!name) continue;
-      if (existing.has(name.toLowerCase())) {
-        skipped++;
-        continue;
-      }
-      const g = {
-        id: crypto.randomUUID(),
-        title: name,
-        platform: "Steam",
-        source: "purchased",
-        status: "backlog",
-        dateAdded: todayISO(),
-      };
-      const mins = item.playtime_forever;
-      if (typeof mins === "number" && mins > 0) g.hoursPlayed = Math.round((mins / 60) * 10) / 10;
-      existing.add(name.toLowerCase());
-      added.push(g);
-    }
+    const { added, skipped } = planSteamImport(list, games);
     if (added.length > 0) setGames((gs) => [...gs, ...added]);
     toast(`Steam import: ${added.length} added, ${skipped} skipped.`, "success");
     return { added: added.length, skipped };

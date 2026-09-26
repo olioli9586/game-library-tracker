@@ -8,6 +8,7 @@ import {
   isSubDependent,
   matchesQuery,
   parsePastedTitles,
+  planSteamImport,
   sanitizeGame,
   sanitizeSub,
   sourcesForPlatform,
@@ -235,5 +236,37 @@ describe("isSubDependent", () => {
   it("flags subscription sources only", () => {
     expect(isSubDependent({ source: "game_pass" })).toBe(true);
     expect(isSubDependent({ source: "prime_gaming" })).toBe(false);
+  });
+});
+
+describe("planSteamImport", () => {
+  const library = [
+    { id: "1", title: "Hades", platform: "Steam", source: "purchased", status: "completed", dateAdded: "2024-01-01" },
+    { id: "2", title: "Stardew Valley", platform: "NS1", source: "purchased", status: "playing", dateAdded: "2024-01-01" },
+  ];
+
+  it("maps Steam games to backlog purchases with hours played", () => {
+    const { added, skipped } = planSteamImport([{ appid: 1, name: "Celeste", playtime_forever: 95 }], library);
+    expect(skipped).toBe(0);
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({ title: "Celeste", platform: "Steam", source: "purchased", status: "backlog", hoursPlayed: 1.6 });
+  });
+
+  it("skips titles already tracked on Steam, case-insensitively", () => {
+    const { added, skipped } = planSteamImport([{ name: "HADES" }], library);
+    expect(added).toHaveLength(0);
+    expect(skipped).toBe(1);
+  });
+
+  it("still imports a Steam copy of a game owned on another platform", () => {
+    const { added } = planSteamImport([{ name: "Stardew Valley" }], library);
+    expect(added.map((g) => g.title)).toEqual(["Stardew Valley"]);
+  });
+
+  it("ignores entries without a usable name and duplicates within the paste", () => {
+    const { added, skipped } = planSteamImport([{ appid: 1 }, { name: 42 }, null, { name: "Celeste" }, { name: "celeste" }], library);
+    expect(added.map((g) => g.title)).toEqual(["Celeste"]);
+    expect(skipped).toBe(1);
+    expect(added[0]).not.toHaveProperty("hoursPlayed");
   });
 });
