@@ -5,6 +5,7 @@ import {
   csvEscape,
   daysBetween,
   fuzzyMatch,
+  gamesToCSV,
   isSubDependent,
   matchesQuery,
   parsePastedTitles,
@@ -116,6 +117,20 @@ describe("csvEscape", () => {
     expect(csvEscape("Hello, World")).toBe('"Hello, World"');
     expect(csvEscape('Say "hi"')).toBe('"Say ""hi"""');
     expect(csvEscape("a\nb")).toBe('"a\nb"');
+    expect(csvEscape("a\r\nb")).toBe('"a\r\nb"');
+    expect(csvEscape("line\r")).toBe('"line\r"');
+  });
+});
+
+describe("gamesToCSV", () => {
+  it("writes a BOM, a header and one quoted row per game", () => {
+    const csv = gamesToCSV([
+      { id: "1", title: "薩爾達傳說, 王國之淚", platform: "NS1", source: "purchased", status: "completed", rating: 10, dateAdded: "2023-05-12" },
+    ]);
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    const [header, row] = csv.slice(1).split("\r\n");
+    expect(header).toBe("id,title,platform,source,status,rating,hoursPlayed,notes,dateAdded,completedDate,leavingSoon");
+    expect(row).toBe('1,"薩爾達傳說, 王國之淚",NS1,purchased,completed,10,,,2023-05-12,,');
   });
 });
 

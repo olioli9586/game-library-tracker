@@ -106,8 +106,17 @@ export function parsePastedTitles(text) {
 export const csvEscape = (v) => {
   if (v === undefined || v === null) return "";
   const s = String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
+
+const CSV_COLUMNS = ["id", "title", "platform", "source", "status", "rating", "hoursPlayed", "notes", "dateAdded", "completedDate", "leavingSoon"];
+
+// UTF-8 BOM first so Excel reads CJK titles as UTF-8 instead of the system code page.
+export function gamesToCSV(games) {
+  const rows = [CSV_COLUMNS.join(",")];
+  for (const g of games) rows.push(CSV_COLUMNS.map((c) => csvEscape(g[c])).join(","));
+  return "\uFEFF" + rows.join("\r\n");
+}
 
 export function daysBetween(endISO) {
   const end = new Date(endISO + "T23:59:59");

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as sync from "./sync.js";
 import {
   PLATFORMS, SOURCES, STATUSES, SUB_SOURCES, isSubDependent, todayISO, fuzzyMatch, matchesQuery,
-  sourcesForPlatform, parsePastedTitles, csvEscape, daysBetween, addMonths, sanitizeSub, sanitizeGame,
+  sourcesForPlatform, parsePastedTitles, gamesToCSV, daysBetween, addMonths, sanitizeSub, sanitizeGame,
   planSteamImport,
 } from "./lib.js";
 
@@ -636,10 +636,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
   };
 
   const exportCSV = () => {
-    const cols = ["id", "title", "platform", "source", "status", "rating", "hoursPlayed", "notes", "dateAdded", "completedDate", "leavingSoon"];
-    const rows = [cols.join(",")];
-    for (const g of games) rows.push(cols.map((c) => csvEscape(g[c])).join(","));
-    downloadFile(`game_library_${todayISO()}.csv`, rows.join("\n"), "text/csv");
+    downloadFile(`game_library_${todayISO()}.csv`, gamesToCSV(games), "text/csv;charset=utf-8");
   };
 
   const handleFile = async (e) => {
