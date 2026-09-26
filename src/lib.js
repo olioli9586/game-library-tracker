@@ -34,12 +34,15 @@ export const localISO = (d) =>
 export const todayISO = () => localISO(new Date());
 // Letters and digits of any script, case- and accent-folded: "Pokémon" ~ "pokemon",
 // full-width "ＦＦ" ~ "ff", and kana / hangul titles are kept rather than erased.
+// Only Latin-style accents are dropped; kana voicing marks are recomposed so that
+// "ガンダム" does not match "カンダム".
 export const norm = (s) =>
   (s || "")
     .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFC")
     .toLowerCase()
-    .replace(/\p{M}/gu, "")
-    .replace(/[^\p{L}\p{N}]/gu, "");
+    .replace(/[^\p{L}\p{N}\p{M}]/gu, "");
 export const fuzzyMatch = (a, b) => {
   const na = norm(a);
   const nb = norm(b);

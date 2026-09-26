@@ -43,6 +43,11 @@ describe("fuzzyMatch", () => {
     expect(fuzzyMatch("젤다의 전설", "젤다")).toBe(true);
   });
 
+  it("keeps kana voicing marks significant", () => {
+    expect(fuzzyMatch("ガンダム", "カンダム")).toBe(false);
+    expect(fuzzyMatch("バイオハザード RE:4", "ﾊﾞｲｵﾊｻﾞｰﾄﾞ")).toBe(true);
+  });
+
   it("ignores accents and full-width characters", () => {
     expect(fuzzyMatch("Pokémon Legends: Z-A", "pokemon legends")).toBe(true);
     expect(fuzzyMatch("ＦＩＮＡＬ ＦＡＮＴＡＳＹ ＶＩＩ", "final fantasy vii")).toBe(true);
