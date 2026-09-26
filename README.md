@@ -17,13 +17,14 @@ Built from `game_tracker_spec.md`.
 
 ## Data & privacy
 
-All data is stored in your browser's `localStorage` — nothing is sent to any server. Use **Export JSON** for backups or to move between devices/browsers.
+All data is stored in your browser's `localStorage`. Nothing leaves the browser unless you turn on the optional **Cloud Sync**, which saves the library to a private GitHub Gist using a `gist`-scoped token you paste in. Use **Export JSON** for backups or to move between devices/browsers.
 
 ## Development
 
 ```bash
 npm install
 npm run dev
+npm test      # vitest unit tests (no network: fetch and localStorage are mocked)
 ```
 
 ## Deployment
