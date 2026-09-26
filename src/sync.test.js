@@ -147,24 +147,42 @@ describe("hasUnpushedLocalChanges", () => {
   const remote = { schema: 1, exportedAt: "2026-09-01T00:00:00.000Z", games: [game], subscriptions: [] };
 
   it("is false when local matches the cloud copy", () => {
-    sync.setSeen(remote.exportedAt);
-    expect(sync.hasUnpushedLocalChanges(remote, [game], [])).toBe(false);
+    expect(sync.hasUnpushedLocalChanges(remote, [game], [], remote.exportedAt)).toBe(false);
   });
 
   it("is true when local was edited after the last sync and the cloud has not moved", () => {
-    sync.setSeen(remote.exportedAt);
-    expect(sync.hasUnpushedLocalChanges(remote, [game, { ...game, id: "g2" }], [])).toBe(true);
-    expect(sync.hasUnpushedLocalChanges(remote, [game], [{ id: "s1", name: "PS Plus", endDate: "2026-12-01", notes: "" }])).toBe(true);
+    expect(sync.hasUnpushedLocalChanges(remote, [game, { ...game, id: "g2" }], [], remote.exportedAt)).toBe(true);
+    expect(sync.hasUnpushedLocalChanges(remote, [game], [{ id: "s1", name: "PS Plus", endDate: "2026-12-01", notes: "" }], remote.exportedAt)).toBe(true);
   });
 
   it("is false when another device pushed since, so the cloud copy wins", () => {
-    sync.setSeen("2026-08-01T00:00:00.000Z");
-    expect(sync.hasUnpushedLocalChanges(remote, [], [])).toBe(false);
+    expect(sync.hasUnpushedLocalChanges(remote, [], [], "2026-08-01T00:00:00.000Z")).toBe(false);
   });
 
   it("is false when this device has no sync history", () => {
-    expect(sync.hasUnpushedLocalChanges(remote, [], [])).toBe(false);
-    expect(sync.hasUnpushedLocalChanges({ games: [] }, [game], [])).toBe(false);
+    expect(sync.hasUnpushedLocalChanges(remote, [], [], "")).toBe(false);
+    expect(sync.hasUnpushedLocalChanges({ games: [] }, [game], [], "")).toBe(false);
+  });
+
+  // pull() records the version it saw, so callers must use the seenBefore it returns
+  describe("with the seenBefore returned by pull()", () => {
+    it("keeps local edits when the cloud is the copy this device last synced", async () => {
+      sync.saveCreds("tok", "gist123");
+      sync.setSeen(remote.exportedAt);
+      cloud = remote;
+      const { data, seenBefore } = await sync.pull();
+      expect(sync.hasUnpushedLocalChanges(data, [game, { ...game, id: "g2" }], [], seenBefore)).toBe(true);
+    });
+
+    it("lets the cloud win when another device pushed since the last sync", async () => {
+      sync.saveCreds("tok", "gist123");
+      sync.setSeen("2026-08-01T00:00:00.000Z");
+      cloud = remote;
+      const { data, seenBefore } = await sync.pull();
+      expect(seenBefore).toBe("2026-08-01T00:00:00.000Z");
+      expect(sync.getSeen()).toBe(remote.exportedAt);
+      expect(sync.hasUnpushedLocalChanges(data, [], [], seenBefore)).toBe(false);
+    });
   });
 });
 

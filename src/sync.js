@@ -77,8 +77,9 @@ function parseContent(gist) {
 // True when the cloud copy is the one this device last pushed or pulled, yet
 // the local library differs from it: the local edits were never pushed (app
 // closed within the push debounce, or offline) and must not be overwritten.
-export function hasUnpushedLocalChanges(remote, games, subs) {
-  if (!remote?.exportedAt || remote.exportedAt !== getSeen()) return false;
+// `seenBefore` must be read before pulling, since pull() records what it saw.
+export function hasUnpushedLocalChanges(remote, games, subs, seenBefore) {
+  if (!remote?.exportedAt || !seenBefore || remote.exportedAt !== seenBefore) return false;
   return (
     JSON.stringify(games) !== JSON.stringify(remote.games) ||
     JSON.stringify(subs) !== JSON.stringify(remote.subscriptions ?? [])
@@ -88,10 +89,11 @@ export function hasUnpushedLocalChanges(remote, games, subs) {
 export async function pull() {
   const gistId = getGistId();
   if (!gistId) throw new Error("No gist configured");
+  const seenBefore = getSeen();
   const gist = await gh(`/gists/${gistId}`);
   const data = parseContent(gist);
   if (data?.exportedAt) setSeen(data.exportedAt);
-  return { data, updatedAt: gist.updated_at };
+  return { data, updatedAt: gist.updated_at, seenBefore };
 }
 
 export async function push(games, subs, { force = false } = {}) {

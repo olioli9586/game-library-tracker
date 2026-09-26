@@ -1465,14 +1465,18 @@ export default function App() {
     if (!sync.isConfigured()) return;
     setSyncState((s) => ({ ...s, state: "syncing" }));
     sync.pull()
-      .then(({ data }) => {
+      .then(({ data, seenBefore }) => {
         if (!data) {
           setSyncState({ state: "error", message: "cloud copy is empty or unreadable" });
           return;
         }
         // Cloud unchanged since our last sync but local differs: keep the local
         // edits and let the pending auto-push upload them.
-        if (sync.hasUnpushedLocalChanges(data, games, subs)) return;
+        if (sync.hasUnpushedLocalChanges(data, games, subs, seenBefore)) {
+          // Don't hide an error from a push that already ran
+          setSyncState((s) => (s.state === "syncing" ? { state: "ok", at: sync.getLastSync() } : s));
+          return;
+        }
         applyingRemoteRef.current = true;
         setGames(data.games);
         setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
