@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as sync from "./sync.js";
 import {
-  PLATFORMS, SOURCES, STATUSES, SUB_SOURCES, isSubDependent, todayISO, norm, fuzzyMatch,
+  PLATFORMS, SOURCES, STATUSES, SUB_SOURCES, isSubDependent, todayISO, fuzzyMatch, matchesQuery,
   sourcesForPlatform, parsePastedTitles, csvEscape, daysBetween, addMonths, sanitizeSub, sanitizeGame,
 } from "./lib.js";
 
@@ -1683,7 +1683,7 @@ export default function App() {
   const quickMatches = useMemo(() => {
     const q = query.trim();
     if (!q) return null;
-    return (games ?? []).filter((g) => fuzzyMatch(g.title, q) || (g.notes && norm(g.notes).includes(norm(q))));
+    return (games ?? []).filter((g) => matchesQuery(g, q));
   }, [query, games]);
 
   const visibleGames = useMemo(() => {
@@ -1696,7 +1696,7 @@ export default function App() {
     else if (tab === "leaving") list = list.filter((g) => g.leavingSoon === true);
 
     const q = query.trim();
-    if (q) list = list.filter((g) => fuzzyMatch(g.title, q) || (g.notes && norm(g.notes).includes(norm(q))));
+    if (q) list = list.filter((g) => matchesQuery(g, q));
 
     if (tab === "all") {
       const f = filters;

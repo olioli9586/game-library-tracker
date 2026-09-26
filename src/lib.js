@@ -32,13 +32,27 @@ export const isSubDependent = (g) => SUB_SOURCES.includes(g.source);
 export const localISO = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const todayISO = () => localISO(new Date());
-export const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9一-鿿]/g, "");
+// Letters and digits of any script, case- and accent-folded: "Pokémon" ~ "pokemon",
+// full-width "ＦＦ" ~ "ff", and kana / hangul titles are kept rather than erased.
+export const norm = (s) =>
+  (s || "")
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
 export const fuzzyMatch = (a, b) => {
   const na = norm(a);
   const nb = norm(b);
   if (!na || !nb) return false;
   return na.includes(nb) || nb.includes(na);
 };
+
+// Quick Check / search: title fuzzy match, or the query appearing in the notes.
+export function matchesQuery(game, query) {
+  const q = norm(query);
+  if (!q) return false;
+  return fuzzyMatch(game.title, query) || norm(game.notes).includes(q);
+}
 
 export function sourcesForPlatform(platform, current) {
   let list;

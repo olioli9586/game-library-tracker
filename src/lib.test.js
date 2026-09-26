@@ -6,6 +6,7 @@ import {
   daysBetween,
   fuzzyMatch,
   isSubDependent,
+  matchesQuery,
   parsePastedTitles,
   sanitizeGame,
   sanitizeSub,
@@ -33,10 +34,41 @@ describe("fuzzyMatch", () => {
     expect(fuzzyMatch("薩爾達傳說 王國之淚", "王國之淚")).toBe(true);
   });
 
+  it("matches Japanese and Korean titles", () => {
+    expect(fuzzyMatch("ゼルダの伝説 ティアーズ オブ ザ キングダム", "ゼルダの伝説")).toBe(true);
+    expect(fuzzyMatch("ドラゴンクエストXI", "ファイナルファンタジー")).toBe(false);
+    expect(fuzzyMatch("젤다의 전설", "젤다")).toBe(true);
+  });
+
+  it("ignores accents and full-width characters", () => {
+    expect(fuzzyMatch("Pokémon Legends: Z-A", "pokemon legends")).toBe(true);
+    expect(fuzzyMatch("ＦＩＮＡＬ ＦＡＮＴＡＳＹ ＶＩＩ", "final fantasy vii")).toBe(true);
+  });
+
   it("never matches empty input", () => {
     expect(fuzzyMatch("", "")).toBe(false);
     expect(fuzzyMatch("Hades", "")).toBe(false);
     expect(fuzzyMatch(undefined, "Hades")).toBe(false);
+  });
+});
+
+describe("matchesQuery", () => {
+  const game = { title: "Control", notes: "Claimed via Prime Gaming" };
+
+  it("matches the title or the notes", () => {
+    expect(matchesQuery(game, "control")).toBe(true);
+    expect(matchesQuery(game, "prime gaming")).toBe(true);
+    expect(matchesQuery(game, "hades")).toBe(false);
+  });
+
+  it("does not match everything with notes when the query has no letters", () => {
+    expect(matchesQuery(game, "!!")).toBe(false);
+    expect(matchesQuery(game, "  ")).toBe(false);
+  });
+
+  it("does not match everything with notes for a kana-only query", () => {
+    expect(matchesQuery(game, "ゼルダ")).toBe(false);
+    expect(matchesQuery({ title: "ゼルダの伝説", notes: "" }, "ゼルダ")).toBe(true);
   });
 });
 
