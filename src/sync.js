@@ -65,6 +65,9 @@ function parseContent(gist) {
   try {
     const data = JSON.parse(file.content);
     if (!Array.isArray(data.games)) return null;
+    // Drop entries the UI can't render (the gist can be hand-edited on GitHub)
+    data.games = data.games.filter((g) => g && typeof g === "object" && typeof g.title === "string");
+    if (!Array.isArray(data.subscriptions)) data.subscriptions = [];
     return data;
   } catch {
     return null;

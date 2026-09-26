@@ -91,7 +91,8 @@ function SourceBadge({ source, leavingSoon }) {
 }
 
 function StatusBadge({ status }) {
-  const meta = STATUSES[status];
+  // Unknown values can arrive from a hand-edited gist; render them rather than crash
+  const meta = STATUSES[status] ?? { label: String(status ?? "—"), cls: STATUSES.backlog.cls };
   return (
     <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${meta.cls}`}>
       {meta.label}
@@ -222,7 +223,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
               <div className="mt-2 text-xs text-honey bg-honey/10 border border-honey/30 rounded-lg px-3 py-2 space-y-0.5">
                 {duplicates.slice(0, 3).map((d) => (
                   <div key={d.id}>
-                    Possible duplicate: <strong>{d.title}</strong> on {d.platform} ({SOURCES[d.source].label})
+                    Possible duplicate: <strong>{d.title}</strong> on {d.platform} ({SOURCES[d.source]?.label ?? d.source})
                   </div>
                 ))}
               </div>
@@ -242,7 +243,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
               <label className={label}>Source *</label>
               <select value={source} onChange={(e) => setSource(e.target.value)} className={field}>
                 {sourceOptions.map((s) => (
-                  <option key={s} value={s}>{SOURCES[s].label}</option>
+                  <option key={s} value={s}>{SOURCES[s]?.label ?? s}</option>
                 ))}
               </select>
             </div>

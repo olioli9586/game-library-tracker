@@ -81,6 +81,14 @@ describe("pull", () => {
     expect((await sync.pull()).data).toBeNull();
   });
 
+  it("drops malformed entries from a hand-edited gist", async () => {
+    sync.saveCreds("tok", "gist123");
+    cloud = { exportedAt: "2026-09-01T00:00:00.000Z", games: [game, null, 7, { id: "x" }], subscriptions: "oops" };
+    const { data } = await sync.pull();
+    expect(data.games).toEqual([game]);
+    expect(data.subscriptions).toEqual([]);
+  });
+
   it("surfaces GitHub error messages", async () => {
     sync.saveCreds("tok", "missing");
     await expect(sync.pull()).rejects.toThrow("GitHub 404: Not Found");
