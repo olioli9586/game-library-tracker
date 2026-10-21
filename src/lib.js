@@ -50,6 +50,30 @@ export const fuzzyMatch = (a, b) => {
   return na.includes(nb) || nb.includes(na);
 };
 
+// For each game, the other games whose titles fuzzy-match it ("also on" badges).
+// Titles are normalised once up front: calling fuzzyMatch per pair re-normalises
+// both titles every time, which stalls the page after a 1,000-game Steam import.
+export function findDuplicates(games) {
+  const titles = games.map((g) => norm(g.title));
+  const m = new Map();
+  const link = (a, b) => {
+    if (!m.has(a.id)) m.set(a.id, []);
+    m.get(a.id).push(b);
+  };
+  for (let i = 0; i < games.length; i++) {
+    const a = titles[i];
+    if (!a) continue;
+    for (let j = i + 1; j < games.length; j++) {
+      const b = titles[j];
+      if (b && (a.includes(b) || b.includes(a))) {
+        link(games[i], games[j]);
+        link(games[j], games[i]);
+      }
+    }
+  }
+  return m;
+}
+
 // Quick Check / search: title fuzzy match, or the query appearing in the notes.
 export function matchesQuery(game, query) {
   const q = norm(query);
@@ -169,6 +193,31 @@ export function sanitizeGame(raw) {
   if (typeof raw.completedDate === "string" && raw.completedDate) g.completedDate = raw.completedDate;
   if (raw.leavingSoon === true && isSubDependent(g)) g.leavingSoon = true;
   return g;
+}
+
+// A backup file is either the current { games, subscriptions } export or the
+// bare games array that older versions wrote. Returns null for anything else.
+export function parseBackup(data) {
+  const rawGames = Array.isArray(data) ? data : Array.isArray(data?.games) ? data.games : null;
+  if (!rawGames) return null;
+  const rawSubs = Array.isArray(data?.subscriptions) ? data.subscriptions : [];
+  return {
+    games: rawGames.map(sanitizeGame).filter(Boolean),
+    subs: rawSubs.map(sanitizeSub).filter(Boolean),
+  };
+}
+
+// Merge imported items into a list by id. Existing ids are replaced only when
+// `overwrite` is set; `added` counts ids that were not there before.
+export function mergeById(existing, incoming, overwrite) {
+  const byId = new Map(existing.map((x) => [x.id, x]));
+  let added = 0;
+  for (const x of incoming) {
+    if (!byId.has(x.id)) added++;
+    else if (!overwrite) continue;
+    byId.set(x.id, x);
+  }
+  return { list: [...byId.values()], added };
 }
 
 // Map a Steam GetOwnedGames `games` list to new library entries. Only titles

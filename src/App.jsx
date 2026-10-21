@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as sync from "./sync.js";
 import {
   PLATFORMS, SOURCES, STATUSES, SUB_SOURCES, isSubDependent, todayISO, fuzzyMatch, matchesQuery,
-  sourcesForPlatform, parsePastedTitles, gamesToCSV, daysBetween, addMonths, sanitizeSub, sanitizeGame,
-  planSteamImport, shortcutAction,
+  sourcesForPlatform, parsePastedTitles, gamesToCSV, daysBetween, addMonths, sanitizeSub,
+  planSteamImport, shortcutAction, findDuplicates, parseBackup, mergeById,
 } from "./lib.js";
 
 /* ------------------------------------------------------------------ */
@@ -160,6 +160,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
   const [source, setSource] = useState(game?.source ?? "purchased");
   const [status, setStatus] = useState(game?.status ?? "backlog");
   const [rating, setRating] = useState(game?.rating?.toString() ?? "");
+  const [hours, setHours] = useState(game?.hoursPlayed?.toString() ?? "");
   const [notes, setNotes] = useState(game?.notes ?? "");
   const [leavingSoon, setLeavingSoon] = useState(game?.leavingSoon ?? false);
   const [error, setError] = useState("");
@@ -169,7 +170,9 @@ function AddEditModal({ game, games, onSave, onClose }) {
     titleRef.current?.focus();
   }, []);
 
-  const sourceOptions = sourcesForPlatform(platform, editing ? game.source : null);
+  // Keep an unusual saved source selectable, but only on its own platform: moving a
+  // PS Plus game to Steam must not leave it as a "Steam / PS Plus Catalog" entry.
+  const sourceOptions = sourcesForPlatform(platform, editing && platform === game.platform ? game.source : null);
   useEffect(() => {
     if (!sourceOptions.includes(source)) setSource(sourceOptions[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,6 +192,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
       return;
     }
     const ratingNum = rating === "" ? undefined : Math.min(10, Math.max(1, Number(rating)));
+    const hoursNum = hours === "" ? undefined : Math.round(Math.max(0, Number(hours)) * 10) / 10;
     const next = {
       id: game?.id ?? crypto.randomUUID(),
       title: title.trim(),
@@ -198,7 +202,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
       dateAdded: game?.dateAdded ?? todayISO(),
     };
     if (ratingNum !== undefined && !Number.isNaN(ratingNum)) next.rating = ratingNum;
-    if (game?.hoursPlayed !== undefined) next.hoursPlayed = game.hoursPlayed;
+    if (hoursNum !== undefined && !Number.isNaN(hoursNum)) next.hoursPlayed = hoursNum;
     if (notes.trim()) next.notes = notes.trim();
     if (subDep && leavingSoon) next.leavingSoon = true;
     if (status === "completed") next.completedDate = game?.completedDate ?? todayISO();
@@ -249,8 +253,8 @@ function AddEditModal({ game, games, onSave, onClose }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="col-span-2 sm:col-span-1">
               <label className={label}>Status *</label>
               <select value={status} onChange={(e) => setStatus(e.target.value)} className={field}>
                 {Object.entries(STATUSES).map(([k, v]) => (
@@ -261,6 +265,10 @@ function AddEditModal({ game, games, onSave, onClose }) {
             <div>
               <label className={label}>Rating (1–10)</label>
               <input type="number" min="1" max="10" value={rating} onChange={(e) => setRating(e.target.value)} className={field} placeholder="—" />
+            </div>
+            <div>
+              <label className={label}>Hours played</label>
+              <input type="number" min="0" step="0.5" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} className={field} placeholder="—" />
             </div>
           </div>
 
@@ -319,7 +327,10 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConf
       // If a gist ID was provided, pull from it before this device may push to it
       if (gistId.trim()) {
         const { data } = await sync.pull();
-        if (data) onPulled(data);
+        // A mistyped ID can point at an unrelated gist; auto-push would write into it
+        if (!data) throw new Error("that gist has no Game Vault library in it — check the ID");
+        onPulled(data);
+        sync.setLastSync(new Date().toISOString());
         toast("Connected to existing gist.", "success");
       }
       setToken(""); setGistId(""); setSetupOpen(false);
@@ -640,7 +651,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
   const [steamResult, setSteamResult] = useState(null);
 
   const exportJSON = () => {
-    downloadFile(`game_library_${todayISO()}.json`, JSON.stringify(games, null, 2), "application/json");
+    downloadFile(`game_library_${todayISO()}.json`, JSON.stringify(sync.buildPayload(games, subs), null, 2), "application/json");
   };
 
   const exportCSV = () => {
@@ -653,13 +664,11 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
     if (!file) return;
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
-      if (!Array.isArray(data)) throw new Error("not an array");
-      const cleaned = data.map(sanitizeGame).filter(Boolean);
-      if (cleaned.length === 0) throw new Error("no valid entries");
-      onImportParsed(cleaned);
+      const backup = parseBackup(JSON.parse(text));
+      if (!backup || backup.games.length + backup.subs.length === 0) throw new Error("no valid entries");
+      onImportParsed(backup.games, backup.subs);
     } catch {
-      toast("Could not read that file — expected a JSON array exported from this app.", "error");
+      toast("Could not read that file — expected a JSON backup exported from this app.", "error");
     }
   };
 
@@ -700,7 +709,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
         <div className="grid sm:grid-cols-2 gap-3">
           <button onClick={exportJSON} className={btn}>
             <div className="font-semibold text-ink text-sm">Export JSON</div>
-            <div className="text-xs text-fade mt-0.5">Full backup — re-importable</div>
+            <div className="text-xs text-fade mt-0.5">Full backup with subscriptions — re-importable</div>
           </button>
           <button onClick={exportCSV} className={btn}>
             <div className="font-semibold text-ink text-sm">Export CSV</div>
@@ -1109,7 +1118,20 @@ const COLUMNS = [
   { key: "source", label: "Source" },
   { key: "status", label: "Status" },
   { key: "rating", label: "Rating" },
+  { key: "hoursPlayed", label: "Hours" },
   { key: "dateAdded", label: "Added" },
+];
+
+// Phones get the cards instead of the table, so sorting there is a dropdown
+const MOBILE_SORTS = [
+  { key: "dateAdded", dir: "desc", label: "Recently added" },
+  { key: "dateAdded", dir: "asc", label: "Oldest added" },
+  { key: "title", dir: "asc", label: "Title A–Z" },
+  { key: "title", dir: "desc", label: "Title Z–A" },
+  { key: "rating", dir: "desc", label: "Highest rated" },
+  { key: "hoursPlayed", dir: "desc", label: "Most played" },
+  { key: "platform", dir: "asc", label: "Platform" },
+  { key: "status", dir: "asc", label: "Status" },
 ];
 
 function GameTable({ games, sort, setSort, onEdit, onDelete, duplicatesMap }) {
@@ -1166,6 +1188,7 @@ function GameTable({ games, sort, setSort, onEdit, onDelete, duplicatesMap }) {
                   <td className="px-3 py-2.5"><SourceBadge source={g.source} leavingSoon={g.leavingSoon} /></td>
                   <td className="px-3 py-2.5"><StatusBadge status={g.status} /></td>
                   <td className="px-3 py-2.5 font-mono text-ink">{g.rating ?? <span className="text-faint">—</span>}</td>
+                  <td className="px-3 py-2.5 font-mono text-ink">{g.hoursPlayed ?? <span className="text-faint">—</span>}</td>
                   <td className="px-3 py-2.5 font-mono text-xs text-fade">{g.dateAdded}</td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap">
                     <IconButton onClick={() => onEdit(g)} title="Edit">✎</IconButton>
@@ -1180,6 +1203,27 @@ function GameTable({ games, sort, setSort, onEdit, onDelete, duplicatesMap }) {
 
       {/* Mobile cards */}
       <div className="sm:hidden space-y-2.5">
+        <label className="flex items-center justify-end gap-2 text-xs text-fade">
+          Sort
+          <select
+            value={`${sort.key}:${sort.dir}`}
+            onChange={(e) => {
+              const [key, dir] = e.target.value.split(":");
+              setSort({ key, dir });
+            }}
+            className="bg-cream border border-line rounded-lg px-2.5 py-1.5 text-sm text-ink focus:outline-none focus:border-wood"
+          >
+            {/* Keep a column sort picked on desktop selectable after resizing */}
+            {!MOBILE_SORTS.some((s) => s.key === sort.key && s.dir === sort.dir) && (
+              <option value={`${sort.key}:${sort.dir}`}>
+                {COLUMNS.find((c) => c.key === sort.key)?.label ?? sort.key} {sort.dir === "asc" ? "↑" : "↓"}
+              </option>
+            )}
+            {MOBILE_SORTS.map((s) => (
+              <option key={`${s.key}:${s.dir}`} value={`${s.key}:${s.dir}`}>{s.label}</option>
+            ))}
+          </select>
+        </label>
         {games.map((g) => {
           const sub = isSubDependent(g);
           return (
@@ -1203,6 +1247,13 @@ function GameTable({ games, sort, setSort, onEdit, onDelete, duplicatesMap }) {
                 <SourceBadge source={g.source} leavingSoon={g.leavingSoon} />
                 <StatusBadge status={g.status} />
               </div>
+              {(g.rating !== undefined || g.hoursPlayed !== undefined) && (
+                <div className="flex gap-3 mt-2 text-xs font-mono text-fade">
+                  {g.rating !== undefined && <span>Rating <span className="text-ink">{g.rating}</span>/10</span>}
+                  {g.hoursPlayed !== undefined && <span><span className="text-ink">{g.hoursPlayed}</span> h played</span>}
+                </div>
+              )}
+              {g.notes && <div className="text-xs text-faint truncate mt-1" title={g.notes}>{g.notes}</div>}
               {duplicatesMap?.get(g.id)?.length > 0 && (
                 <div className="flex items-center gap-1 mt-2 flex-wrap">
                   <span className="text-[10px] text-faint uppercase tracking-wider">also on</span>
@@ -1399,10 +1450,12 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [syncState, setSyncState] = useState({ state: sync.isConfigured() ? "ok" : "off", at: sync.getLastSync() });
   const searchRef = useRef(null);
-  const loadedRef = useRef(false);
-  const applyingRemoteRef = useRef(false);
-  const pushTimerRef = useRef(null);
+  // JSON of the library as the cloud last had it: auto-push skips states equal to it,
+  // so opening the app or applying a pull doesn't write an identical gist revision.
+  const syncedRef = useRef(null);
   const initialPullDoneRef = useRef(false);
+  // Auto-push waits for the startup pull, so it can't race it into a false conflict
+  const [pullSettled, setPullSettled] = useState(false);
 
   const toast = useCallback((msg, type = "info") => {
     const id = crypto.randomUUID();
@@ -1447,9 +1500,6 @@ export default function App() {
 
   useEffect(() => {
     if (games === null) return;
-    if (!loadedRef.current) {
-      loadedRef.current = true;
-    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(games));
     } catch {
@@ -1457,12 +1507,22 @@ export default function App() {
     }
   }, [games, toast]);
 
+  const handlePulled = useCallback((data) => {
+    const remoteSubs = data.subscriptions.map(sanitizeSub).filter(Boolean);
+    syncedRef.current = JSON.stringify([data.games, remoteSubs]);
+    setGames(data.games);
+    setSubs(remoteSubs);
+  }, []);
+
   // Initial pull on load (if sync configured)
   useEffect(() => {
     if (games === null) return;
     if (initialPullDoneRef.current) return;
     initialPullDoneRef.current = true;
-    if (!sync.isConfigured()) return;
+    if (!sync.isConfigured()) {
+      setPullSettled(true);
+      return;
+    }
     setSyncState((s) => ({ ...s, state: "syncing" }));
     sync.pull()
       .then(({ data, seenBefore }) => {
@@ -1477,27 +1537,26 @@ export default function App() {
           setSyncState((s) => (s.state === "syncing" ? { state: "ok", at: sync.getLastSync() } : s));
           return;
         }
-        applyingRemoteRef.current = true;
-        setGames(data.games);
-        setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
+        handlePulled(data);
         sync.setLastSync(new Date().toISOString());
         setSyncState({ state: "ok", at: new Date().toISOString() });
       })
       .catch((e) => {
         setSyncState({ state: "error", message: e.message });
         toast(`Cloud pull failed: ${e.message}`, "error");
-      });
+      })
+      .finally(() => setPullSettled(true));
     // Guarded to run once; `subs` is intentionally the value from the first load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [games, toast]);
+  }, [games, toast, handlePulled]);
 
   // Debounced auto-push when games/subs change
   useEffect(() => {
-    if (games === null) return;
+    if (games === null || !pullSettled) return;
     if (!sync.isConfigured()) return;
-    if (applyingRemoteRef.current) { applyingRemoteRef.current = false; return; }
-    clearTimeout(pushTimerRef.current);
-    pushTimerRef.current = setTimeout(async () => {
+    const snapshot = JSON.stringify([games, subs]);
+    if (snapshot === syncedRef.current) return;
+    const timer = setTimeout(async () => {
       setSyncState((s) => ({ ...s, state: "syncing" }));
       try {
         const res = await sync.push(games, subs);
@@ -1507,19 +1566,14 @@ export default function App() {
           setModal((m) => m ?? { type: "sync-conflict", remote: res.remote });
           return;
         }
+        syncedRef.current = snapshot;
         setSyncState({ state: "ok", at: new Date().toISOString() });
       } catch (e) {
         setSyncState({ state: "error", message: e.message });
       }
     }, 2000);
-    return () => clearTimeout(pushTimerRef.current);
-  }, [games, subs]);
-
-  const handlePulled = useCallback((data) => {
-    applyingRemoteRef.current = true;
-    setGames(data.games);
-    setSubs(Array.isArray(data.subscriptions) ? data.subscriptions : []);
-  }, []);
+    return () => clearTimeout(timer);
+  }, [games, subs, pullSettled]);
 
   const resolveSyncConflict = async (mode) => {
     const remote = modal.remote;
@@ -1608,39 +1662,35 @@ export default function App() {
     toast(`Deleted "${g.title}".`, "success");
   };
 
-  const handleImportParsed = (incoming) => {
+  const importInto = (incoming, incomingSubs, overwrite) => {
+    const g = mergeById(games, incoming, overwrite);
+    const s = mergeById(subs, incomingSubs, overwrite);
+    setGames(g.list);
+    setSubs(s.list);
+    setModal(null);
+    const replaced = overwrite ? incoming.length - g.added : 0;
+    const parts = [`${g.added} game${g.added === 1 ? "" : "s"} added`];
+    if (replaced > 0) parts.push(`${replaced} overwritten`);
+    if (s.added > 0) parts.push(`${s.added} subscription${s.added === 1 ? "" : "s"} added`);
+    toast(`Imported: ${parts.join(", ")}.`, "success");
+  };
+
+  const handleImportParsed = (incoming, incomingSubs = []) => {
     const ids = new Set(games.map((g) => g.id));
-    const conflicts = incoming.filter((g) => ids.has(g.id));
-    if (conflicts.length > 0) {
-      setModal({ type: "conflict", incoming, conflictCount: conflicts.length });
+    const conflictCount = incoming.filter((g) => ids.has(g.id)).length;
+    if (conflictCount > 0) {
+      setModal({ type: "conflict", incoming, incomingSubs, conflictCount });
     } else {
-      setGames((gs) => [...gs, ...incoming]);
-      setModal(null);
-      toast(`Imported ${incoming.length} games.`, "success");
+      importInto(incoming, incomingSubs, false);
     }
   };
 
   const resolveConflict = (mode) => {
-    const { incoming } = modal;
     if (mode === "cancel") {
       setModal(null);
       return;
     }
-    setGames((gs) => {
-      const byId = new Map(gs.map((g) => [g.id, g]));
-      let added = 0;
-      for (const g of incoming) {
-        if (byId.has(g.id)) {
-          if (mode === "overwrite") byId.set(g.id, g);
-        } else {
-          byId.set(g.id, g);
-          added++;
-        }
-      }
-      return [...byId.values()];
-    });
-    setModal(null);
-    toast(mode === "overwrite" ? `Imported ${incoming.length} games (conflicts overwritten).` : `Imported new games, skipped existing ones.`, "success");
+    importInto(modal.incoming, modal.incomingSubs, mode === "overwrite");
   };
 
   const saveSub = (s) => {
@@ -1715,19 +1765,7 @@ export default function App() {
     });
   }, [games, tab, query, filters, sort]);
 
-  const duplicatesMap = useMemo(() => {
-    const m = new Map();
-    if (!games) return m;
-    for (let i = 0; i < games.length; i++) {
-      const dups = [];
-      for (let j = 0; j < games.length; j++) {
-        if (i === j) continue;
-        if (fuzzyMatch(games[i].title, games[j].title)) dups.push(games[j]);
-      }
-      if (dups.length) m.set(games[i].id, dups);
-    }
-    return m;
-  }, [games]);
+  const duplicatesMap = useMemo(() => findDuplicates(games ?? []), [games]);
 
   const activeFilterCount =
     filters.platforms.length + filters.sources.length + filters.statuses.length + (filters.subRisk ? 1 : 0) + (filters.leavingSoon ? 1 : 0);
@@ -1913,7 +1951,7 @@ export default function App() {
                   );
                 })}
                 <a
-                  href="https://store.playstation.com/zh-tw-HK/pages/ps-plus"
+                  href="https://store.playstation.com/zh-hant-tw/pages/ps-plus"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-block text-sm text-wood hover:text-wood-dark underline underline-offset-2"
@@ -1983,7 +2021,11 @@ export default function App() {
         </div>
 
         <footer className="mt-10 text-center text-xs text-faint leading-relaxed">
-          Data is stored in this browser only (localStorage) — use <strong className="text-fade">Export JSON</strong> for backups or to move devices.
+          {sync.isConfigured() ? (
+            <>Saved in this browser and synced to your private GitHub gist — <strong className="text-fade">Export JSON</strong> still makes an offline backup.</>
+          ) : (
+            <>Data is stored in this browser only (localStorage) — use <strong className="text-fade">Export JSON</strong> for backups, or set up Cloud Sync to share between devices.</>
+          )}
           <br />
           Shortcuts: <kbd className="font-mono text-fade">N</kbd> add · <kbd className="font-mono text-fade">/</kbd> search ·{" "}
           <kbd className="font-mono text-fade">Esc</kbd> close

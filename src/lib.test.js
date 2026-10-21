@@ -4,10 +4,13 @@ import {
   todayISO,
   csvEscape,
   daysBetween,
+  findDuplicates,
   fuzzyMatch,
   gamesToCSV,
   isSubDependent,
   matchesQuery,
+  mergeById,
+  parseBackup,
   parsePastedTitles,
   planSteamImport,
   shortcutAction,
@@ -316,5 +319,65 @@ describe("shortcutAction", () => {
     }
     expect(shortcutAction({ key: "n", target: { tagName: "DIV", isContentEditable: true } })).toBeNull();
     expect(shortcutAction({ key: "Escape", target: { tagName: "INPUT" } })).toBe("close");
+  });
+});
+
+describe("findDuplicates", () => {
+  const g = (id, title, platform = "Steam") => ({ id, title, platform });
+
+  it("links fuzzy-matching titles in both directions", () => {
+    const games = [g("a", "Hollow Knight", "NS1"), g("b", "hollow knight"), g("c", "Hades")];
+    const m = findDuplicates(games);
+    expect(m.get("a").map((x) => x.id)).toEqual(["b"]);
+    expect(m.get("b").map((x) => x.id)).toEqual(["a"]);
+    expect(m.has("c")).toBe(false);
+  });
+
+  it("collects every match for a title owned three times", () => {
+    const m = findDuplicates([g("a", "Control"), g("b", "Control", "GOG"), g("c", "CONTROL", "PS5")]);
+    expect(m.get("a").map((x) => x.id)).toEqual(["b", "c"]);
+    expect(m.get("c").map((x) => x.id)).toEqual(["a", "b"]);
+  });
+
+  it("ignores titles with no letters or digits", () => {
+    expect(findDuplicates([g("a", "!!!"), g("b", "???")]).size).toBe(0);
+  });
+});
+
+describe("parseBackup", () => {
+  const game = { id: "g1", title: "Hades", platform: "Steam", source: "purchased", status: "backlog", dateAdded: "2024-01-01" };
+  const sub = { id: "s1", name: "PS Plus", endDate: "2026-01-01", notes: "" };
+
+  it("reads the current export with subscriptions", () => {
+    expect(parseBackup({ schema: 1, games: [game], subscriptions: [sub] })).toEqual({ games: [game], subs: [sub] });
+  });
+
+  it("still reads the bare games array older versions exported", () => {
+    expect(parseBackup([game])).toEqual({ games: [game], subs: [] });
+  });
+
+  it("drops invalid entries and rejects other shapes", () => {
+    expect(parseBackup({ games: [game, { title: "x" }], subscriptions: [{ name: "no date" }] })).toEqual({ games: [game], subs: [] });
+    expect(parseBackup({ foo: 1 })).toBeNull();
+    expect(parseBackup(null)).toBeNull();
+  });
+});
+
+describe("mergeById", () => {
+  const existing = [{ id: "a", v: 1 }, { id: "b", v: 1 }];
+  const incoming = [{ id: "b", v: 2 }, { id: "c", v: 2 }];
+
+  it("adds new ids and keeps existing ones when not overwriting", () => {
+    expect(mergeById(existing, incoming, false)).toEqual({
+      list: [{ id: "a", v: 1 }, { id: "b", v: 1 }, { id: "c", v: 2 }],
+      added: 1,
+    });
+  });
+
+  it("replaces existing ids when overwriting", () => {
+    expect(mergeById(existing, incoming, true)).toEqual({
+      list: [{ id: "a", v: 1 }, { id: "b", v: 2 }, { id: "c", v: 2 }],
+      added: 1,
+    });
   });
 });
