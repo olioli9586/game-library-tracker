@@ -73,6 +73,18 @@ describe("pull", () => {
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer tok");
   });
 
+  it("can peek without marking the cloud version seen", async () => {
+    sync.saveCreds("tok", "gist123");
+    sync.setSeen("2026-08-01T00:00:00.000Z");
+    cloud = { schema: 1, exportedAt: "2026-09-01T00:00:00.000Z", games: [game], subscriptions: [] };
+    const { data, seenBefore } = await sync.pull({ markSeen: false });
+    expect(data.exportedAt).toBe("2026-09-01T00:00:00.000Z");
+    expect(seenBefore).toBe("2026-08-01T00:00:00.000Z");
+    expect(sync.getSeen()).toBe("2026-08-01T00:00:00.000Z");
+    // so a push of local edits made meanwhile still reports the conflict
+    expect((await sync.push([], [])).conflict).toBe(true);
+  });
+
   it("returns null data for an empty or corrupt gist", async () => {
     sync.saveCreds("tok", "gist123");
     cloud = "{not json";

@@ -268,7 +268,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
             </div>
             <div>
               <label className={label}>Hours played</label>
-              <input type="number" min="0" step="0.5" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} className={field} placeholder="—" />
+              <input type="number" min="0" step="any" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} className={field} placeholder="—" />
             </div>
           </div>
 
@@ -304,7 +304,7 @@ function AddEditModal({ game, games, onSave, onClose }) {
 /* Export / Import panel                                                */
 /* ------------------------------------------------------------------ */
 
-function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConflict, toast }) {
+function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConflict, onSynced, toast }) {
   const [setupOpen, setSetupOpen] = useState(false);
   const [token, setToken] = useState("");
   const [gistId, setGistId] = useState("");
@@ -320,6 +320,7 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConf
       let id = gistId.trim();
       if (!id) {
         id = await sync.createGist(token.trim(), games, subs);
+        onSynced(games, subs);
         toast("New private gist created — your library is now in the cloud.", "success");
       }
       sync.saveCreds(token.trim(), id);
@@ -351,6 +352,7 @@ function CloudSyncPanel({ games, subs, syncState, setSyncState, onPulled, onConf
         onConflict(res.remote);
         return;
       }
+      onSynced(games, subs);
       setSyncState({ state: "ok", at: new Date().toISOString() });
       toast("Pushed to cloud.", "success");
     } catch (e) {
@@ -643,7 +645,7 @@ function BulkPastePanel({ games, onImport, toast }) {
   );
 }
 
-function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onConflict, onClose, onImportParsed, onSteamImport, toast }) {
+function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onConflict, onSynced, onClose, onImportParsed, onSteamImport, toast }) {
   const fileRef = useRef(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [steamOpen, setSteamOpen] = useState(false);
@@ -703,6 +705,7 @@ function ExportImportModal({ games, subs, syncState, setSyncState, onPulled, onC
           setSyncState={setSyncState}
           onPulled={onPulled}
           onConflict={onConflict}
+          onSynced={onSynced}
           toast={toast}
         />
 
@@ -1454,6 +1457,7 @@ export default function App() {
   // so opening the app or applying a pull doesn't write an identical gist revision.
   const syncedRef = useRef(null);
   const initialPullDoneRef = useRef(false);
+  const pendingConflictRef = useRef(null);
   // Auto-push waits for the startup pull, so it can't race it into a false conflict
   const [pullSettled, setPullSettled] = useState(false);
 
@@ -1506,6 +1510,10 @@ export default function App() {
       toast("Failed to save your library (storage full or blocked).", "error");
     }
   }, [games, toast]);
+
+  const markSynced = useCallback((gs, ss) => {
+    syncedRef.current = JSON.stringify([gs, ss]);
+  }, []);
 
   const handlePulled = useCallback((data) => {
     const remoteSubs = data.subscriptions.map(sanitizeSub).filter(Boolean);
@@ -1562,8 +1570,12 @@ export default function App() {
         const res = await sync.push(games, subs);
         if (res.conflict) {
           setSyncState({ state: "error", message: "cloud changed on another device" });
-          // Don't steal focus from a modal the user is in — the conflict resurfaces on the next push
-          setModal((m) => m ?? { type: "sync-conflict", remote: res.remote });
+          // Don't steal focus from a modal the user is in; show it once that closes
+          setModal((m) => {
+            if (!m) return { type: "sync-conflict", remote: res.remote };
+            pendingConflictRef.current = res.remote;
+            return m;
+          });
           return;
         }
         syncedRef.current = snapshot;
@@ -1574,6 +1586,47 @@ export default function App() {
     }, 2000);
     return () => clearTimeout(timer);
   }, [games, subs, pullSettled]);
+
+  // A phone app resumed from the background (or a tab left open) never reloads, so
+  // without this it keeps showing stale data and every edit ends in a sync conflict.
+  // Only refresh while this device has nothing unpushed; otherwise the push decides.
+  const latestRef = useRef(null);
+  useEffect(() => {
+    latestRef.current = JSON.stringify([games, subs]);
+  }, [games, subs]);
+  useEffect(() => {
+    if (!pullSettled) return;
+    let lastCheck = Date.now();
+    let inFlight = false;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible" || inFlight) return;
+      if (!sync.isConfigured() || Date.now() - lastCheck < 30_000) return;
+      if (!syncedRef.current || latestRef.current !== syncedRef.current) return;
+      inFlight = true;
+      lastCheck = Date.now();
+      try {
+        const { data, seenBefore } = await sync.pull({ markSeen: false });
+        // Unchanged in the cloud, or edited here while the request was out
+        if (!data?.exportedAt || data.exportedAt === seenBefore) return;
+        if (latestRef.current !== syncedRef.current) return;
+        sync.setSeen(data.exportedAt);
+        handlePulled(data);
+        sync.setLastSync(new Date().toISOString());
+        setSyncState({ state: "ok", at: new Date().toISOString() });
+        toast("Updated with changes from your other device.", "success");
+      } catch {
+        // Offline or rate-limited: try again on the next return to the app
+      } finally {
+        inFlight = false;
+      }
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [pullSettled, handlePulled, toast]);
 
   const resolveSyncConflict = async (mode) => {
     const remote = modal.remote;
@@ -1588,6 +1641,7 @@ export default function App() {
       setSyncState({ state: "syncing" });
       try {
         await sync.push(games, subs, { force: true });
+        markSynced(games, subs);
         setSyncState({ state: "ok", at: new Date().toISOString() });
         toast("Cloud overwritten with this device's library.", "success");
       } catch (e) {
@@ -1596,6 +1650,30 @@ export default function App() {
       }
     }
   };
+
+  useEffect(() => {
+    if (modal !== null || !pendingConflictRef.current) return;
+    setModal({ type: "sync-conflict", remote: pendingConflictRef.current });
+    pendingConflictRef.current = null;
+  }, [modal]);
+
+  // Another tab of the app saved: take its library, or the two tabs would keep
+  // overwriting each other's edits in localStorage
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== STORAGE_KEY && e.key !== SUBS_KEY) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (!Array.isArray(parsed)) return;
+        if (e.key === STORAGE_KEY) setGames(parsed);
+        else setSubs(parsed.map(sanitizeSub).filter(Boolean));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   /* ---- keyboard shortcuts ---- */
   useEffect(() => {
@@ -2043,6 +2121,7 @@ export default function App() {
           setSyncState={setSyncState}
           onPulled={handlePulled}
           onConflict={(remote) => setModal({ type: "sync-conflict", remote })}
+          onSynced={markSynced}
           onClose={() => setModal(null)}
           onImportParsed={handleImportParsed}
           onSteamImport={handleSteamImport}

@@ -86,13 +86,16 @@ export function hasUnpushedLocalChanges(remote, games, subs, seenBefore) {
   );
 }
 
-export async function pull() {
+// `markSeen: false` peeks without recording the version: a caller that might
+// not apply the result must not mark it seen, or a later push of unapplied
+// local edits would overwrite it without a conflict.
+export async function pull({ markSeen = true } = {}) {
   const gistId = getGistId();
   if (!gistId) throw new Error("No gist configured");
   const seenBefore = getSeen();
   const gist = await gh(`/gists/${gistId}`);
   const data = parseContent(gist);
-  if (data?.exportedAt) setSeen(data.exportedAt);
+  if (markSeen && data?.exportedAt) setSeen(data.exportedAt);
   return { data, updatedAt: gist.updated_at, seenBefore };
 }
 
